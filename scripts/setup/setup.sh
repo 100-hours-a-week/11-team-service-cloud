@@ -5,7 +5,9 @@ FRONTEND_REPO="https://github.com/100-hours-a-week/11-team-service-fe"
 BACKEND_REPO="https://github.com/100-hours-a-week/11-team-service-be"
 FASTAPI_REPO="https://github.com/100-hours-a-week/11-team-service-ai"
 DB_SCHEMA="service_db"
+DB_USER="developer"
 DB_PASSWORD="Qwerty123456!"
+ENV_PATH="/home/ubuntu/.env"
 
 # JDK, Node, Python 버전
 JDK_VERSION="21"
@@ -32,6 +34,10 @@ git clone ${FASTAPI_REPO} fastAPI
 sleep 1 # 잠시 대기
 echo "=== Nginx 설치 ==="
 sudo apt install nginx -y
+sudo systemctl enable nginx
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+sudo cp ${SCRIPT_DIR}/config/nginx/default.conf /etc/nginx/sites-available/default.conf
+sudo nginx -t && sudo systemctl restart nginx
 
 sleep 1 # 잠시 대기
 echo "=== Java 설치 ==="
@@ -55,21 +61,28 @@ sudo systemctl start mysql
 echo "=== MySQL 초기 세팅 ==="
 sleep 10  # MySQL 서버 완전 시작 대기
 
+echo "=== DB/유저 생성(멱등성 고려) ==="
 sudo mysql <<EOF
-ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DB_PASSWORD}';
+CREATE DATABASE IF NOT EXISTS \`${DB_SCHEMA}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE USER IF NOT EXISTS '${DB_USER}'@'%' IDENTIFIED BY '${DB_PASSWORD}';
+
+GRANT ALL PRIVILEGES ON \`${DB_SCHEMA}\`.* TO '${DB_USER}'@'%';
 FLUSH PRIVILEGES;
-CREATE DATABASE ${DB_SCHEMA};
 EOF
 
 sleep 1 # 잠시 대기
 echo "=== 환경 변수 파일 작성 ==="
-cd /home/ubuntu
-cat << EOF > .env
+cat << EOF | sudo tee "$ENV_PATH" >/dev/null
 export DB_HOST=localhost
 export DB_PORT=3306
 export DB_NAME=${DB_SCHEMA}
+export DB_USER=${DB_USER}
 export DB_PASSWORD=${DB_PASSWORD}
 EOF
+
+sudo chmod 600 "$ENV_PATH"
+sudo chown ubuntu:ubuntu "$ENV_PATH"
 
 echo "=== 환경 변수 적용 ==="
 set -a
