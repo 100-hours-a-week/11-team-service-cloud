@@ -1,0 +1,79 @@
+#!/bin/bash
+
+# 변수 설정 (수정 필요)
+FRONTEND_REPO="https://github.com/100-hours-a-week/11-team-service-fe"
+BACKEND_REPO="https://github.com/100-hours-a-week/11-team-service-be"
+FASTAPI_REPO="https://github.com/100-hours-a-week/11-team-service-ai"
+DB_SCHEMA="service_db"
+DB_PASSWORD="Qwerty123456!"
+
+# JDK, Node, Python 버전
+JDK_VERSION="21"
+NODE_VERSION="22"
+PYTHON_VERSION="3.11"
+
+sleep 1 # 잠시 대기
+echo "=== 패키지 업데이트 ==="
+sudo add-apt-repository ppa:deadsnakes/ppa -y # Python 3.11 버전 설치를 위해 추가.
+sudo apt update
+sudo apt upgrade -y
+
+sleep 1 # 잠시 대기
+echo "=== Git 설치 ==="
+sudo apt install git -y
+
+sleep 3 # 잠시 대기
+echo "=== 프로젝트 클론 ==="
+cd /home/ubuntu
+git clone ${FRONTEND_REPO} frontend
+git clone ${BACKEND_REPO} backend
+git clone ${FASTAPI_REPO} fastAPI
+
+sleep 1 # 잠시 대기
+echo "=== Nginx 설치 ==="
+sudo apt install nginx -y
+
+sleep 1 # 잠시 대기
+echo "=== Java 설치 ==="
+sudo apt install openjdk-${JDK_VERSION}-jdk -y
+
+sleep 1 # 잠시 대기
+echo "=== Node.js 설치 ==="
+curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | sudo -E bash -
+sudo apt install nodejs -y
+
+sleep 1 # 잠시 대기
+echo "=== Python 설치 ==="
+sudo apt install python${PYTHON_VERSION} python3-pip python3-venv -y
+
+sleep 1 # 잠시 대기
+echo "=== MySQL 설치 및 실행 ==="
+sudo apt install mysql-server -y
+sudo systemctl enable mysql
+sudo systemctl start mysql
+
+echo "=== MySQL 초기 세팅 ==="
+sleep 10  # MySQL 서버 완전 시작 대기
+
+sudo mysql <<EOF
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DB_PASSWORD}';
+FLUSH PRIVILEGES;
+CREATE DATABASE ${DB_SCHEMA};
+EOF
+
+sleep 1 # 잠시 대기
+echo "=== 환경 변수 파일 작성 ==="
+cd /home/ubuntu
+cat << EOF > .env
+export DB_HOST=localhost
+export DB_PORT=3306
+export DB_NAME=${DB_SCHEMA}
+export DB_PASSWORD=${DB_PASSWORD}
+EOF
+
+echo "=== 환경 변수 적용 ==="
+set -a
+source .env
+set +a
+
+echo "=== 환경 세팅 완료 ==="
