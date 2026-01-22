@@ -34,7 +34,7 @@ echo "=== 환경 변수 파일 작성 ==="
 cat << EOF | sudo tee "$ENV_PATH" >/dev/null
 export DB_HOST=localhost
 export DB_PORT=3306
-export DB_NAME=${DB_SCHEMA}
+export DB_SCHEMA=${DB_SCHEMA}
 export DB_USER=${DB_USER}
 export DB_PASSWORD=${DB_PASSWORD}
 EOF
