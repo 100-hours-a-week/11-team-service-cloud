@@ -39,6 +39,10 @@ echo "=== Java 설치 ==="
 sudo apt install openjdk-${JDK_VERSION}-jdk -y
 
 sleep 1 # 잠시 대기
+echo "=== gradle 설치 ==="
+sudo apt install gradle -y
+
+sleep 1 # 잠시 대기
 echo "=== Node.js 설치 ==="
 curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | sudo -E bash -
 sudo apt install nodejs -y
