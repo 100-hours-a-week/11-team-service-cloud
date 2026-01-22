@@ -44,8 +44,15 @@ echo "=== Java 설치 ==="
 sudo apt install openjdk-${JDK_VERSION}-jdk -y
 
 sleep 1 # 잠시 대기
+echo "=== unzip 설치 ==="
+sudo apt install unzip -y
+
+sleep 1 # 잠시 대기
 echo "=== gradle 설치 ==="
-sudo apt install gradle -y
+wget https://services.gradle.org/distributions/gradle-8.14.3-bin.zip
+sudo unzip gradle-8.14.3-bin.zip -d /opt/gradle
+echo 'export PATH=/opt/gradle/gradle-8.14.3/bin:$PATH' >> ~/.bashrc
+source ~/.bashrc
 
 sleep 1 # 잠시 대기
 echo "=== Node.js 설치 ==="
