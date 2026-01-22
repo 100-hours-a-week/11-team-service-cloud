@@ -1,5 +1,5 @@
 # Cloud Infrastructure
-
+v0.0.1
 Ubuntu 서버 초기 환경 구성을 위한 인프라 스크립트 모음
 
 ## 구조
@@ -22,6 +22,12 @@ cloud/
 ```
 
 ## 사용법
+
+```bash
+# make 설치
+sudo apt install make
+```
+
 
 ```bash
 # 명령어 목록 확인
