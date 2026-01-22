@@ -37,4 +37,4 @@ build-all:
 deploy-all:
 	@echo "=== FE + BE + AI 서버 배포 ==="
 	@chmod +x $(DEPLOY_DIR)/deploy.sh
-	@$(DEPLOY_DIR)/deploy.sh
+	@$(DEPLOY_DIR)/deploy.sh restart

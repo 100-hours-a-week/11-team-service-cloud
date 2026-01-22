@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 변수 설정 (프로젝트명 수정 필요)
-BACKEND_JAR="your-project-name.jar"
+BACKEND_JAR="scuad-be-0.0.1-SNAPSHOT.jar"
 
 start() {
     echo "=== 프론트엔드 실행 ==="
