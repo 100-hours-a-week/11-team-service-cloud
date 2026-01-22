@@ -16,7 +16,9 @@ cloud/
     │   ├── setup-source.sh     # 소스코드 + 개발 환경
     │   └── setup-mysql.sh      # MySQL만 설치/설정
     ├── build/                  # 빌드 스크립트
+    │   └── build.sh            # FE + BE + AI 빌드 스크립트
     └── deploy/                 # 배포 스크립트
+        └── deploy.sh           # FE + BE + AI 배포 스크립트
 ```
 
 ## 사용법
