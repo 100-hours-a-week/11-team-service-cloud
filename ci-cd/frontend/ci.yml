@@ -1,0 +1,153 @@
+name: Frontend CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  # ----------------------------
+  # 1. Build (테스트 제외)
+  # ----------------------------
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload dist (temporary for downstream job)
+        uses: actions/upload-artifact@v4
+        with:
+          name: fe-dist
+          path: dist/**
+          retention-days: 1
+
+  # ----------------------------
+  # 2. Test
+  # ----------------------------
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: build
+    if: ${{ github.base_ref != 'main' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Integration/Smoke tests (develop)
+        if: ${{ github.base_ref == 'develop' }}
+        run: npm run test:integration
+
+  # ----------------------------
+  # 3. Static Analysis (Lint/Format)
+  # ----------------------------
+  static_analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    needs: test
+    if: ${{ github.base_ref == 'develop' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Prettier check
+        run: npm run format:check
+
+  # ----------------------------
+  # 4. Artifacts (develop)
+  # ----------------------------
+  artifacts:
+    name: Upload Verified Artifact
+    runs-on: ubuntu-latest
+    needs: [build, test, static_analysis]
+    if: ${{ github.base_ref == 'develop' }}
+
+    steps:
+      - name: Download dist
+        uses: actions/download-artifact@v4
+        with:
+          name: fe-dist
+          path: dist
+
+      - name: Upload verified dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-fe-dist
+          path: dist/**
+          retention-days: 90
+
+  # ----------------------------
+  # 5. Main → S3 Archive
+  # ----------------------------
+  main_archive:
+    name: Archive to S3
+    runs-on: ubuntu-latest
+    needs: build
+    if: ${{ github.base_ref == 'main' }}
+
+    steps:
+      - name: Set meta
+        id: meta
+        run: |
+          echo "timestamp=$(date -u +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+
+      - name: Download dist
+        uses: actions/download-artifact@v4
+        with:
+          name: fe-dist
+          path: dist
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ap-northeast-2
+
+      - name: List dist
+        run: ls -la dist && find dist -maxdepth 2 -type f | head
+
+      - name: Upload dist to S3
+        env:
+          BUCKET: ${{ secrets.RELEASE_BUCKET }}
+          PREFIX: releases/${{ steps.meta.outputs.timestamp }}
+        run: |
+          aws s3 cp dist/ \
+            s3://$BUCKET/$PREFIX/frontend/ \
+            --recursive

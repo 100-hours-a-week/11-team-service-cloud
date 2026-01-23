@@ -1,0 +1,163 @@
+name: FastAPI CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  id-token: write # required to get OIDC token
+  contents: read # required to check out repository content
+
+jobs:
+  # ----------------------------
+  # 1. Build
+  # ----------------------------
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Import Check
+        run: uv run python -c "import api.main"
+
+      - name: Upload source snapshot (temporary for downstream job)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-source
+          path: |
+            **/*.py
+            pyproject.toml
+            README.md
+            api/**
+            shared/**
+            pipelines/**
+            uv.lock
+            pytest.ini
+          retention-days: 1
+
+  # ----------------------------
+  # 2. Test
+  # ----------------------------
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: build
+    if: ${{ github.base_ref != 'main' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Smoke tests (develop)
+        if: ${{ github.base_ref == 'develop' }}
+        run: uv run pytest
+
+  # ----------------------------
+  # 3. Static Analysis
+  # ----------------------------
+  static_analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    needs: test
+    if: ${{ github.base_ref == 'develop' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Ruff (lint)
+        run: uv run ruff check .
+
+      - name: Black (format check)
+        run: uv run black --check .
+
+      - name: MyPy (type check)
+        run: uv run mypy .
+        continue-on-error: true
+
+  # ----------------------------
+  # 4. Artifacts (develop)
+  # ----------------------------
+  artifacts:
+    name: Artifacts
+    runs-on: ubuntu-latest
+    needs: [build, test, static_analysis]
+    if: ${{ github.base_ref == 'develop' }}
+
+    steps:
+      - name: Download source snapshot
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-source
+          path: ai
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-ai-source
+          path: ai/**
+          retention-days: 90
+
+  # ----------------------------
+  # 5. Archive
+  # ----------------------------
+  main_archive:
+    name: Archive to S3
+    runs-on: ubuntu-latest
+    needs: build
+    if: ${{ github.base_ref == 'main' }}
+
+    steps:
+      - name: Set meta
+        id: meta
+        run: |
+          echo "timestamp=$(date -u +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+
+      - name: Download source snapshot
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-source
+          path: ai
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ap-northeast-2
+
+      - name: Upload source to S3
+        env:
+          BUCKET: ${{ secrets.RELEASE_BUCKET }}
+          PREFIX: releases/ai
+        run: |
+          aws s3 cp ai/ \
+            s3://$BUCKET/$PREFIX/${{ steps.meta.outputs.timestamp }} \
+            --recursive
