@@ -17,6 +17,7 @@ cloud/
     │   ├── setup-source.sh     # 소스코드 + 개발 환경
     │   ├── setup-mysql.sh      # MySQL만
     │   ├── install/            # 패키지 설치
+    │   │   ├── aws-cli.sh
     │   │   ├── nginx.sh
     │   │   ├── java.sh
     │   │   ├── node.sh
@@ -70,6 +71,7 @@ make deploy-stop     # 종료
 | Python         | 3.11   |
 | MySQL          | 8.0.xx |
 | Nginx          | 1.28.1 |
+| AWS CLI        | 2.x.x  |
 
 ## 아키텍처
 
@@ -94,3 +96,7 @@ Client → Nginx(:443) → /api/*  → Spring Boot(:8080)
 | `BACKEND_JAR`   | Spring Boot JAR 파일명  |
 
 버전 관련 변수(`JDK_VERSION`, `NODE_VERSION` 등)도 `.env`에서 관리됩니다.
+
+## 자동 배포 (CI/CD)
+
+이 프로젝트는 GitHub Actions를 사용하여 각 서비스(Frontend, Backend, AI)의 독립적인 자동 배포를 지원합니다. `main` 브랜치에 코드가 푸시되면 해당 서비스의 배포 파이프라인이 자동으로 실행됩니다.
