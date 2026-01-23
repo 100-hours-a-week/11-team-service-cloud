@@ -13,7 +13,16 @@ cloud/
     ├── setup/
     │   ├── setup.sh            # 전체 환경 세팅
     │   ├── setup-source.sh     # 소스코드 + 개발 환경
-    │   └── setup-mysql.sh      # MySQL 설치/설정
+    │   ├── setup-mysql.sh      # MySQL만
+    │   ├── install/            # 패키지 설치
+    │   │   ├── nginx.sh
+    │   │   ├── java.sh
+    │   │   ├── node.sh
+    │   │   ├── python.sh
+    │   │   └── mysql.sh
+    │   └── config/             # 설정 적용
+    │       ├── nginx.sh
+    │       └── mysql.sh
     ├── build/
     │   └── build.sh            # FE + BE + AI 빌드
     └── deploy/
@@ -51,8 +60,8 @@ make deploy-stop     # 종료
 | Java (OpenJDK) | 21 |
 | Node.js | 22 |
 | Python | 3.11 |
-| MySQL | latest |
-| Nginx | latest |
+| MySQL | 8.0.44 |
+| Nginx | 1.28.1 |
 
 ## 아키텍처
 
@@ -66,6 +75,6 @@ Client → Nginx(:443) → /api/*  → Spring Boot(:8080)
 
 스크립트 실행 전 환경에 맞게 수정 필요:
 
-- `scripts/setup/*.sh` - 레포 URL, DB 정보, 런타임 버전
+- `scripts/setup/setup.sh` - 레포 URL, DB 정보, 런타임 버전
 - `scripts/deploy/deploy.sh` - JAR 파일명
 - `configs/nginx/default.conf` - 도메인, SSL 인증서 경로
