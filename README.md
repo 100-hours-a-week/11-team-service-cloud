@@ -63,13 +63,13 @@ make deploy-stop     # 종료
 
 ## 기술 스택
 
-| 구분 | 버전 |
-|------|------|
-| Java (OpenJDK) | 21 |
-| Node.js | 22 |
-| Python | 3.11 |
-| MySQL | 8.0.44 |
-| Nginx | 1.28.1 |
+| 구분           | 버전   |
+| -------------- | ------ |
+| Java (OpenJDK) | 21     |
+| Node.js        | 22     |
+| Python         | 3.11   |
+| MySQL          | 8.0.xx |
+| Nginx          | 1.28.1 |
 
 ## 아키텍처
 
@@ -83,14 +83,14 @@ Client → Nginx(:443) → /api/*  → Spring Boot(:8080)
 
 `.env.example`을 복사하여 `.env`를 생성하고 환경에 맞게 수정:
 
-| 변수 | 설명 |
-|------|------|
+| 변수            | 설명                    |
+| --------------- | ----------------------- |
 | `FRONTEND_REPO` | 프론트엔드 Git 레포 URL |
-| `BACKEND_REPO` | 백엔드 Git 레포 URL |
-| `FASTAPI_REPO` | AI Git 레포 URL |
-| `DB_SCHEMA` | MySQL 데이터베이스명 |
-| `DB_USER` | MySQL 유저명 |
-| `DB_PASSWORD` | MySQL 비밀번호 |
-| `BACKEND_JAR` | Spring Boot JAR 파일명 |
+| `BACKEND_REPO`  | 백엔드 Git 레포 URL     |
+| `FASTAPI_REPO`  | AI Git 레포 URL         |
+| `DB_SCHEMA`     | MySQL 데이터베이스명    |
+| `DB_USER`       | MySQL 유저명            |
+| `DB_PASSWORD`   | MySQL 비밀번호          |
+| `BACKEND_JAR`   | Spring Boot JAR 파일명  |
 
 버전 관련 변수(`JDK_VERSION`, `NODE_VERSION` 등)도 `.env`에서 관리됩니다.

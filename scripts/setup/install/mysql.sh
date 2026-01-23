@@ -14,7 +14,7 @@ sudo apt update
 
 echo "=== MySQL ${MYSQL_VERSION} 설치 ==="
 sudo DEBIAN_FRONTEND=noninteractive apt install -y \
-  mysql-community-server=${MYSQL_VERSION}-1ubuntu$(lsb_release -rs) \
-  mysql-community-client=${MYSQL_VERSION}-1ubuntu$(lsb_release -rs)
+  mysql-community-server \
+  mysql-community-client
 sudo systemctl enable mysql
 sudo systemctl start mysql
