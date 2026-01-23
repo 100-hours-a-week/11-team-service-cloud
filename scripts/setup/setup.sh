@@ -23,6 +23,7 @@ export NGINX_VERSION="1.28.1"
 # =============================================
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="${SCRIPT_DIR}/install"
+CONFIG_DIR="${SCRIPT_DIR}/config"
 
 # =============================================
 # 실행
@@ -46,8 +47,8 @@ source ${INSTALL_DIR}/node.sh
 source ${INSTALL_DIR}/python.sh
 source ${INSTALL_DIR}/mysql.sh
 
-# Nginx 설정 적용
-sudo cp ${SCRIPT_DIR}/../../configs/nginx/default.conf /etc/nginx/sites-available/default.conf
-sudo nginx -t && sudo systemctl restart nginx
+# 설정 적용
+source ${CONFIG_DIR}/nginx.sh
+source ${CONFIG_DIR}/mysql.sh
 
 echo "=== 전체 환경 세팅 완료 ==="

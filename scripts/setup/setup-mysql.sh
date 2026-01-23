@@ -14,6 +14,7 @@ export MYSQL_VERSION="8.0.44"
 # =============================================
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="${SCRIPT_DIR}/install"
+CONFIG_DIR="${SCRIPT_DIR}/config"
 
 # =============================================
 # 실행
@@ -22,5 +23,6 @@ echo "=== 패키지 업데이트 ==="
 sudo apt update
 
 source ${INSTALL_DIR}/mysql.sh
+source ${CONFIG_DIR}/mysql.sh
 
 echo "=== MySQL 설치 및 설정 완료 ==="
