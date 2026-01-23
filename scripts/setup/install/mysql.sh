@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if command -v mysql &> /dev/null && mysql --version 2>&1 | grep -q "${MYSQL_VERSION}"; then
+  echo "=== MySQL ${MYSQL_VERSION} 이미 설치됨 (스킵) ==="
+  return 0
+fi
+
 echo "=== MySQL APT 저장소 추가 ==="
 wget -q https://dev.mysql.com/get/mysql-apt-config_0.8.33-1_all.deb
 echo "mysql-apt-config mysql-apt-config/select-server select mysql-8.0" | sudo debconf-set-selections
