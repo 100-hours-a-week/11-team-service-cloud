@@ -1,0 +1,82 @@
+name: FastAPI CD
+
+on:
+  workflow_run:
+    workflows: ["FastAPI CI"]
+    types: [completed]
+    branches: [develop]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Download artifact from CI
+        uses: actions/download-artifact@v4
+        with:
+          name: verified-ai-source
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: ./ai
+
+      - name: List AI files
+        run: ls -la ai && find ai -maxdepth 2 -type f | head
+
+      - name: Deploy AI source to Dev Server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          source: "ai/**"
+          target: "/home/ubuntu/ai"
+          strip_components: 1
+
+      - name: Restart FastAPI (nohup example)
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/ai
+
+            # uv 설치 (없으면)
+            if ! command -v uv &> /dev/null; then
+              curl -LsSf https://astral.sh/uv/install.sh | sh
+              export PATH="$HOME/.local/bin:$PATH"
+            fi
+
+            # 의존성 설치/업데이트
+            uv sync
+
+            # 기존 프로세스 종료 (uvicorn 기준)
+            pkill -f "uvicorn" || true
+            sleep 2
+
+            # 새 버전 실행
+            nohup uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 > ai.log 2>&1 &
+            echo "FastAPI restarted"
+
+      - name: Notify Discord - Success
+        if: success()
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: success
+          title: "🚀 AI 배포 성공"
+          description: "FastAPI dev 서버 재시작 완료"
+
+      - name: Notify Discord - Failure
+        if: failure()
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: failure
+          title: "🚨 AI 배포 실패"
+          description: "FastAPI dev 배포 중 오류 발생"

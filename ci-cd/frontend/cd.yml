@@ -1,0 +1,56 @@
+name: Frontend CD
+
+on:
+  workflow_run:
+    workflows: ["Frontend CI"]
+    types: [completed]
+    branches: [develop]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Download artifact from CI
+        uses: actions/download-artifact@v4
+        with:
+          name: verified-fe-dist
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: ./dist
+
+      - name: List dist
+        run: ls -la dist && find dist -maxdepth 3 -type f | head
+
+      - name: Deploy dist to Dev Server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          source: "dist/**"
+          target: "/home/ubuntu/frontend"
+          strip_components: 1
+
+      - name: Notify Discord - Success
+        if: success()
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: success
+          title: "🚀 프론트엔드 배포 성공"
+          description: "Frontend dist 배포 완료"
+
+      - name: Notify Discord - Failure
+        if: failure()
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: failure
+          title: "🚨 프론트엔드 배포 실패"
+          description: "Frontend dist 배포 중 오류 발생"
