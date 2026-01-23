@@ -1,29 +1,21 @@
 #!/bin/bash
 
 # =============================================
-# 변수 설정 (수정 필요)
-# =============================================
-export FRONTEND_REPO="https://github.com/100-hours-a-week/11-team-service-fe"
-export BACKEND_REPO="https://github.com/100-hours-a-week/11-team-service-be"
-export FASTAPI_REPO="https://github.com/100-hours-a-week/11-team-service-ai"
-export DB_SCHEMA="service_db"
-export DB_USER="developer"
-export DB_PASSWORD="Qwerty123456!"
-export ENV_PATH="/home/ubuntu/.env"
-
-# 버전
-export JDK_VERSION="21"
-export NODE_VERSION="22"
-export PYTHON_VERSION="3.11"
-export MYSQL_VERSION="8.0.44"
-export NGINX_VERSION="1.28.1"
-
-# =============================================
-# 스크립트 경로
+# .env 로드
 # =============================================
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="${SCRIPT_DIR}/../.."
 INSTALL_DIR="${SCRIPT_DIR}/install"
 CONFIG_DIR="${SCRIPT_DIR}/config"
+
+if [ ! -f "${PROJECT_ROOT}/.env" ]; then
+  echo "ERROR: .env 파일이 없습니다. .env.example을 참고하여 .env를 생성해주세요."
+  exit 1
+fi
+
+set -a
+source "${PROJECT_ROOT}/.env"
+set +a
 
 # =============================================
 # 실행

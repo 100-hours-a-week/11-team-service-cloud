@@ -7,6 +7,8 @@ Ubuntu 서버 초기 환경 구성, 빌드, 배포를 위한 인프라 스크립
 ```
 cloud/
 ├── Makefile
+├── .env.example          # 환경변수 템플릿
+├── .gitignore
 ├── configs/
 │   └── nginx/default.conf
 └── scripts/
@@ -29,12 +31,18 @@ cloud/
         └── deploy.sh           # 서비스 start/stop/restart
 ```
 
-## 사용법
+## 시작하기
 
 ```bash
-# make 설치
+# 1. make 설치
 sudo apt install make
+
+# 2. 환경변수 설정
+cp .env.example .env
+vi .env  # 환경에 맞게 수정
 ```
+
+## 사용법
 
 ```bash
 make help            # 명령어 목록
@@ -71,10 +79,18 @@ Client → Nginx(:443) → /api/*  → Spring Boot(:8080)
                                   FastAPI(:8000)
 ```
 
-## 설정 변경
+## 환경변수
 
-스크립트 실행 전 환경에 맞게 수정 필요:
+`.env.example`을 복사하여 `.env`를 생성하고 환경에 맞게 수정:
 
-- `scripts/setup/setup.sh` - 레포 URL, DB 정보, 런타임 버전
-- `scripts/deploy/deploy.sh` - JAR 파일명
-- `configs/nginx/default.conf` - 도메인, SSL 인증서 경로
+| 변수 | 설명 |
+|------|------|
+| `FRONTEND_REPO` | 프론트엔드 Git 레포 URL |
+| `BACKEND_REPO` | 백엔드 Git 레포 URL |
+| `FASTAPI_REPO` | AI Git 레포 URL |
+| `DB_SCHEMA` | MySQL 데이터베이스명 |
+| `DB_USER` | MySQL 유저명 |
+| `DB_PASSWORD` | MySQL 비밀번호 |
+| `BACKEND_JAR` | Spring Boot JAR 파일명 |
+
+버전 관련 변수(`JDK_VERSION`, `NODE_VERSION` 등)도 `.env`에서 관리됩니다.

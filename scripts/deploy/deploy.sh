@@ -1,8 +1,23 @@
 #!/bin/bash
 
-# 변수 설정 (프로젝트명 수정 필요)
-BACKEND_JAR="scuad-be-0.0.1-SNAPSHOT.jar"
+# =============================================
+# .env 로드
+# =============================================
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="${SCRIPT_DIR}/../.."
 
+if [ ! -f "${PROJECT_ROOT}/.env" ]; then
+  echo "ERROR: .env 파일이 없습니다. .env.example을 참고하여 .env를 생성해주세요."
+  exit 1
+fi
+
+set -a
+source "${PROJECT_ROOT}/.env"
+set +a
+
+# =============================================
+# 함수
+# =============================================
 start() {
     echo "=== 프론트엔드 실행 ==="
     cd /home/ubuntu/frontend
