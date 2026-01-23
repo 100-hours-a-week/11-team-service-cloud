@@ -9,10 +9,11 @@ DB_USER="developer"
 DB_PASSWORD="Qwerty123456!"
 ENV_PATH="/home/ubuntu/.env"
 
-# JDK, Node, Python 버전
+# JDK, Node, Python, MySQL 버전
 JDK_VERSION="21"
 NODE_VERSION="22"
 PYTHON_VERSION="3.11"
+MYSQL_VERSION="8.0.44"
 
 sleep 1 # 잠시 대기
 echo "=== 패키지 업데이트 ==="
@@ -69,8 +70,18 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
 
 sleep 1 # 잠시 대기
-echo "=== MySQL 설치 및 실행 ==="
-sudo apt install mysql-server -y
+echo "=== MySQL APT 저장소 추가 ==="
+wget -q https://dev.mysql.com/get/mysql-apt-config_0.8.33-1_all.deb
+echo "mysql-apt-config mysql-apt-config/select-server select mysql-8.0" | sudo debconf-set-selections
+sudo DEBIAN_FRONTEND=noninteractive dpkg -i mysql-apt-config_0.8.33-1_all.deb
+rm -f mysql-apt-config_0.8.33-1_all.deb
+sudo apt update
+
+sleep 1 # 잠시 대기
+echo "=== MySQL ${MYSQL_VERSION} 설치 및 실행 ==="
+sudo DEBIAN_FRONTEND=noninteractive apt install -y \
+  mysql-community-server=${MYSQL_VERSION}-1ubuntu$(lsb_release -rs) \
+  mysql-community-client=${MYSQL_VERSION}-1ubuntu$(lsb_release -rs)
 sudo systemctl enable mysql
 sudo systemctl start mysql
 
