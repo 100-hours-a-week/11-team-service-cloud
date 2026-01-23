@@ -38,6 +38,7 @@ source ${INSTALL_DIR}/java.sh
 source ${INSTALL_DIR}/node.sh
 source ${INSTALL_DIR}/python.sh
 source ${INSTALL_DIR}/mysql.sh
+source ${INSTALL_DIR}/aws-cli.sh
 
 # 설정 적용
 source ${CONFIG_DIR}/nginx.sh
