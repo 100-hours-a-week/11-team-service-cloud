@@ -17,8 +17,9 @@ start() {
     ps aux | grep java | grep -v grep
 
     echo "=== FastAPI 실행 ==="
-    cd /home/ubuntu/fastAPI
-    nohup .venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 > fastapi.log 2>&1 &
+    cd /home/ubuntu/ai
+    nohup uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 > ai.log 2>&1 &
+    echo $! > uvicorn.pid
     sleep 2
     ps aux | grep uvicorn | grep -v grep
 
@@ -33,7 +34,10 @@ stop() {
     pkill -f "java -jar"
 
     echo "=== FastAPI 종료 ==="
-    pkill -f "uvicorn"
+    if [ -f /home/ubuntu/ai/uvicorn.pid ]; then
+      kill "$(cat /home/ubuntu/ai/uvicorn.pid)" 2>/dev/null || true
+      rm -f /home/ubuntu/ai/uvicorn.pid
+    fi
 
     echo "=== 종료 완료 ==="
 }

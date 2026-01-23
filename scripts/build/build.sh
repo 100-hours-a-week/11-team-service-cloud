@@ -15,12 +15,14 @@ git pull
 
 # FastAPI 설정
 echo "=== FastAPI 설정 시작 ==="
-cd /home/ubuntu/fastAPI
-git pull
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-pip install fastapi uvicorn
+cd /home/ubuntu/ai
+
+# uv 설치 (없으면)
+if ! command -v uv &> /dev/null; then
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+
+uv sync
 
 echo "=== 빌드 완료 ==="

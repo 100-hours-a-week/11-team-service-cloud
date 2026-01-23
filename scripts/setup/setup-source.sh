@@ -25,7 +25,7 @@ echo "=== 프로젝트 클론 ==="
 cd /home/ubuntu
 git clone ${FRONTEND_REPO} frontend
 git clone ${BACKEND_REPO} backend
-git clone ${FASTAPI_REPO} fastAPI
+git clone ${FASTAPI_REPO} ai
 
 sleep 1 # 잠시 대기
 echo "=== Nginx 설치 ==="
@@ -56,6 +56,11 @@ sudo apt install nodejs -y
 
 sleep 1 # 잠시 대기
 echo "=== Python 설치 ==="
-sudo apt install python${PYTHON_VERSION} python3-pip python3-venv -y
+sudo apt install python${PYTHON_VERSION} -y
+
+sleep 1 # 잠시 대기
+echo "=== uv 설치 ==="
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
 
 echo "=== 환경 세팅 완료 ==="
