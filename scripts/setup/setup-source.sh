@@ -5,10 +5,11 @@ FRONTEND_REPO="https://github.com/100-hours-a-week/11-team-service-fe"
 BACKEND_REPO="https://github.com/100-hours-a-week/11-team-service-be"
 FASTAPI_REPO="https://github.com/100-hours-a-week/11-team-service-ai"
 
-# JDK, Node, Python 버전
+# JDK, Node, Python, Nginx 버전
 JDK_VERSION="21"
 NODE_VERSION="22"
 PYTHON_VERSION="3.11"
+NGINX_VERSION="1.28.1"
 
 sleep 1 # 잠시 대기
 echo "=== 패키지 업데이트 ==="
@@ -28,8 +29,14 @@ git clone ${BACKEND_REPO} backend
 git clone ${FASTAPI_REPO} ai
 
 sleep 1 # 잠시 대기
-echo "=== Nginx 설치 ==="
-sudo apt install nginx -y
+echo "=== Nginx APT 저장소 추가 ==="
+curl -fsSL https://nginx.org/keys/nginx_signing.key | sudo gpg --dearmor -o /usr/share/keyrings/nginx-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/ubuntu $(lsb_release -cs) nginx" \
+  | sudo tee /etc/apt/sources.list.d/nginx.list
+sudo apt update
+
+echo "=== Nginx ${NGINX_VERSION} 설치 ==="
+sudo apt install -y nginx=${NGINX_VERSION}-1~$(lsb_release -cs)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 sudo cp ${SCRIPT_DIR}/config/nginx/default.conf /etc/nginx/sites-available/default.conf
 sudo nginx -t && sudo systemctl restart nginx

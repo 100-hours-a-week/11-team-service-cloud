@@ -9,11 +9,12 @@ DB_USER="developer"
 DB_PASSWORD="Qwerty123456!"
 ENV_PATH="/home/ubuntu/.env"
 
-# JDK, Node, Python, MySQL 버전
+# JDK, Node, Python, MySQL, Nginx 버전
 JDK_VERSION="21"
 NODE_VERSION="22"
 PYTHON_VERSION="3.11"
 MYSQL_VERSION="8.0.44"
+NGINX_VERSION="1.28.1"
 
 sleep 1 # 잠시 대기
 echo "=== 패키지 업데이트 ==="
@@ -33,8 +34,14 @@ git clone ${BACKEND_REPO} backend
 git clone ${FASTAPI_REPO} ai
 
 sleep 1 # 잠시 대기
-echo "=== Nginx 설치 ==="
-sudo apt install nginx -y
+echo "=== Nginx APT 저장소 추가 ==="
+curl -fsSL https://nginx.org/keys/nginx_signing.key | sudo gpg --dearmor -o /usr/share/keyrings/nginx-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/ubuntu $(lsb_release -cs) nginx" \
+  | sudo tee /etc/apt/sources.list.d/nginx.list
+sudo apt update
+
+echo "=== Nginx ${NGINX_VERSION} 설치 ==="
+sudo apt install -y nginx=${NGINX_VERSION}-1~$(lsb_release -cs)
 sudo systemctl enable nginx
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 sudo cp ${SCRIPT_DIR}/config/nginx/default.conf /etc/nginx/sites-available/default.conf
