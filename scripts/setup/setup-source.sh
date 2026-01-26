@@ -23,14 +23,11 @@ set +a
 echo "=== 패키지 업데이트 ==="
 sudo apt update && sudo apt upgrade -y
 
-echo "=== Git 설치 ==="
-sudo apt install -y git
-
-echo "=== 프로젝트 클론 ==="
-cd /home/ubuntu
-git clone ${FRONTEND_REPO} frontend
-git clone ${BACKEND_REPO} backend
-git clone ${FASTAPI_REPO} ai
+echo "=== 프로젝트 디렉토리 생성 ==="
+mkdir -p /home/ubuntu/frontend
+mkdir -p /home/ubuntu/backend
+mkdir -p /home/ubuntu/ai
+chown -R ubuntu:ubuntu /home/ubuntu/frontend /home/ubuntu/backend /home/ubuntu/ai
 
 # 개별 설치 스크립트 실행
 source ${INSTALL_DIR}/nginx.sh
