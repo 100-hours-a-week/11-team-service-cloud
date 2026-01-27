@@ -103,6 +103,53 @@ Client → Nginx(:443) → /api/*  → Spring Boot(:8080)
 
 버전 관련 변수(`JDK_VERSION`, `NODE_VERSION` 등)도 `.env`에서 관리됩니다.
 
+### AWS Parameter Store 사용 (프로덕션 환경)
+
+프로덕션 환경에서는 `.env` 파일을 AWS Parameter Store에 저장하여 안전하게 관리합니다.
+
+#### 1. .env 파일 생성 및 수정
+
+```bash
+cd cloud
+cp .env.example .env
+vi .env  # 실제 값으로 수정
+```
+
+#### 2. Parameter Store에 저장
+
+```bash
+aws ssm put-parameter \
+  --name "/bigbang/dot-env" \
+  --value "$(cat .env)" \
+  --type "SecureString" \
+  --region ap-northeast-2 \
+  --description "BigBang service .env configuration"
+```
+
+#### 3. 저장 확인
+
+```bash
+aws ssm get-parameter \
+  --name "/bigbang/dot-env" \
+  --with-decryption \
+  --region ap-northeast-2 \
+  --query 'Parameter.Value' \
+  --output text
+```
+
+#### 4. 값 업데이트
+
+```bash
+aws ssm put-parameter \
+  --name "/bigbang/dot-env" \
+  --value "$(cat .env)" \
+  --type "SecureString" \
+  --region ap-northeast-2 \
+  --overwrite
+```
+
+Terraform으로 EC2 인스턴스를 생성하면 user_data에서 자동으로 Parameter Store에서 `.env`를 가져와 사용합니다.
+
 ## 자동 배포 (CI/CD)
 
 GitHub Actions를 사용하여 각 서비스(Frontend, Backend, AI)의 독립적인 자동 배포를 지원합니다.
@@ -119,9 +166,29 @@ GitHub Actions를 사용하여 각 서비스(Frontend, Backend, AI)의 독립적
 
 AWS 인프라를 코드로 관리합니다.
 
+### 주요 리소스
+
+- **main.tf**: VPC, Subnet, Security Group, EC2 인스턴스
+- **iam.tf**: EC2 IAM 역할 및 권한
+  - AWS Systems Manager Parameter Store 읽기 권한
+  - S3 버킷 읽기 권한 (배포 아티팩트 다운로드)
+- **provider.tf**: AWS 프로바이더 설정
+- **terraform.tf**: Terraform 백엔드 설정
+
+### 사용법
+
 ```bash
 cd terraform
 terraform init      # 초기화
 terraform plan      # 변경 사항 미리보기
 terraform apply     # 인프라 적용
 ```
+
+### EC2 초기화 과정 (user_data)
+
+EC2 인스턴스 생성 시 자동으로 실행:
+
+1. 패키지 업데이트 및 필수 도구 설치 (make, wget, awscli)
+2. GitHub에서 프로젝트 코드 다운로드 (develop 브랜치)
+3. AWS Parameter Store에서 `.env` 파일 가져오기
+4. `make setup-all`로 전체 환경 세팅
