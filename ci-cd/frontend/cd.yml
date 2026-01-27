@@ -7,6 +7,7 @@ on:
     branches: [develop]
 
 permissions:
+  id-token: write
   contents: read
   actions: read
 
@@ -16,18 +17,67 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
-      - name: Download artifact from CI
-        uses: actions/download-artifact@v4
+      # ----------------------------
+      # 1. AWS 인증
+      # ----------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          name: verified-fe-dist
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ github.token }}
-          path: ./dist
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ap-northeast-2
 
-      - name: List dist
-        run: ls -la dist && find dist -maxdepth 3 -type f | head
+      # ----------------------------
+      # 2. S3에서 최신 dist 다운로드
+      # ----------------------------
+      - name: Download artifact from S3
+        env:
+          BUCKET: ${{ secrets.RELEASE_BUCKET }}
+          PREFIX: releases/frontend
+        run: |
+          rm -rf ./dist
+          mkdir -p ./dist
 
-      - name: Deploy dist to Dev Server
+          # latest 폴더에서 dist 동기화
+          aws s3 cp "s3://$BUCKET/$PREFIX/latest/" ./dist/ --recursive
+
+          echo "Downloaded from s3://$BUCKET/$PREFIX/latest/"
+          ls -la ./dist | head
+
+      - name: Prepare release name
+        id: meta
+        run: echo "release=$(TZ='Asia/Seoul' date -u +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+      
+      # ----------------------------
+      # 3. 서버로 배포
+      # ----------------------------
+      - name: Deploy dist to server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          script: |
+            set -e
+            echo "=== Frontend Deploy Start ==="
+
+            TARGET_DIR="/home/ubuntu/frontend"
+            BACKUP_DIR="/home/ubuntu/frontend_backup"
+
+            # 백업 (롤백 대비)
+            rm -rf $BACKUP_DIR
+            if [ -d "$TARGET_DIR" ]; then
+              cp -r $TARGET_DIR $BACKUP_DIR
+              echo "Backup completed"
+            fi
+
+            # 기존 파일 제거
+            rm -rf $TARGET_DIR
+            mkdir -p $TARGET_DIR
+
+      # ----------------------------
+      # 4. dist 업로드
+      # ----------------------------
+      - name: Upload dist files
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.DEV_HOST }}
@@ -36,7 +86,71 @@ jobs:
           source: "dist/**"
           target: "/home/ubuntu/frontend"
           strip_components: 1
+      
+      # ----------------------------
+      # 5. Nginx Reload
+      # ----------------------------
+      - name: Reload nginx
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          script: |
+            sudo nginx -t
+            sudo systemctl reload nginx
+            echo "Nginx reloaded"
 
+      # ----------------------------
+      # 6. Health Check
+      # ----------------------------
+      - name: Health check
+        id: health_check
+        uses: appleboy/ssh-action@master
+        continue-on-error: true
+        with:
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          script: |
+            echo "Waiting for frontend to be available..."
+            sleep 10
+
+            if curl -sf http://localhost > /dev/null; then
+              echo "Health check success"
+              exit 0
+            fi
+
+            echo "Health check failed"
+            exit 1
+
+      # ----------------------------
+      # 7. Rollback
+      # ----------------------------
+      - name: Rollback on failure
+        if: steps.health_check.outcome == 'failure'
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          script: |
+            TARGET_DIR="/home/ubuntu/frontend"
+            BACKUP_DIR="/home/ubuntu/frontend_backup"
+
+            if [ -d "$BACKUP_DIR" ]; then
+              rm -rf $TARGET_DIR
+              mv $BACKUP_DIR $TARGET_DIR
+              sudo systemctl reload nginx
+              echo "Rollback completed"
+            else
+              echo "Rollback failed: no backup"
+              exit 1
+            fi
+      
+      # ----------------------------
+      # 8. Discord 알림
+      # ----------------------------
       - name: Notify Discord - Success
         if: success()
         uses: sarisia/actions-status-discord@v1
