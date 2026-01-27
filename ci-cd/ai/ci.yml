@@ -1,9 +1,14 @@
 name: FastAPI CI
 
 on:
+  workflow_dispatch: # 수동 실행
   pull_request:
     branches: [develop, main]
     types: [opened, synchronize, reopened]
+    paths-ignore:
+      - "**.md" # 문서 변경 무시
+      # - ".github/**" # 워크플로우 변경 무시
+      # - ".git*" # Git 설정 변경 무시
 
 permissions:
   id-token: write # required to get OIDC token
@@ -16,6 +21,9 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    outputs:
+      artifact_name: ${{ steps.meta.outputs.artifact_name }}
+      version: ${{ steps.meta.outputs.version }}
 
     steps:
       - uses: actions/checkout@v4
@@ -32,19 +40,28 @@ jobs:
       - name: Import Check
         run: uv run python -c "import api.main"
 
+      - name: Set metadata (artifact name / version)
+        id: meta
+        run: |
+          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          ARTIFACT_NAME="ai-${VERSION}-${GITHUB_SHA::7}"
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+
       - name: Upload source snapshot (temporary for downstream job)
         uses: actions/upload-artifact@v4
         with:
-          name: ai-source
+          name: ${{ steps.meta.outputs.artifact_name }}
           path: |
-            **/*.py
-            pyproject.toml
-            README.md
             api/**
             shared/**
             pipelines/**
+            **/*.py
+            pyproject.toml
             uv.lock
             pytest.ini
+            README.md
           retention-days: 1
 
   # ----------------------------
@@ -54,7 +71,6 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     needs: build
-    if: ${{ github.base_ref != 'main' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -104,48 +120,25 @@ jobs:
         continue-on-error: true
 
   # ----------------------------
-  # 4. Artifacts (develop)
+  # 4. Main -> S3 Release Archive (develop)
   # ----------------------------
-  artifacts:
-    name: Artifacts
+  snapshot_archive:
+    name: Archive to S3
     runs-on: ubuntu-latest
     needs: [build, test, static_analysis]
     if: ${{ github.base_ref == 'develop' }}
 
     steps:
-      - name: Download source snapshot
-        uses: actions/download-artifact@v4
-        with:
-          name: ai-source
-          path: ai
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: verified-ai-source
-          path: ai/**
-          retention-days: 90
-
-  # ----------------------------
-  # 5. Archive
-  # ----------------------------
-  main_archive:
-    name: Archive to S3
-    runs-on: ubuntu-latest
-    needs: build
-    if: ${{ github.base_ref == 'main' }}
-
-    steps:
       - name: Set meta
         id: meta
         run: |
-          echo "timestamp=$(date -u +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+          echo "timestamp=$(TZ='Asia/Seoul' date -u +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
 
-      - name: Download source snapshot
+      - name: Download built artifact
         uses: actions/download-artifact@v4
         with:
-          name: ai-source
-          path: ai
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: artifact
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -153,11 +146,55 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ap-northeast-2
 
-      - name: Upload source to S3
+      - name: Upload snapshot to S3
+        env:
+          BUCKET: ${{ secrets.RELEASE_BUCKET }}
+          PREFIX: snapshots/ai
+        run: |
+          # 타임스탬프 폴더에 저장 (빌드 히스토리)
+          aws s3 cp artifact/ \
+            s3://$BUCKET/$PREFIX/${{ needs.build.outputs.version }}/${{ steps.meta.outputs.timestamp }}/ \
+            --recursive
+
+          # latest 폴더에 덮어쓰기 (최신 스냅샷)
+          aws s3 cp artifact/ \
+            s3://$BUCKET/$PREFIX/latest/ \
+            --recursive
+
+
+  # -----------------------------------
+  # 5. Main -> S3 Release Archive (main)
+  # -------------------------------------
+  release_archive:
+    name: Archive release to S3
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    if: ${{ github.base_ref == 'main' }}
+
+    steps:
+      - name: Download built artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: artifact
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ap-northeast-2
+      
+      - name: Upload release to S3
         env:
           BUCKET: ${{ secrets.RELEASE_BUCKET }}
           PREFIX: releases/ai
         run: |
-          aws s3 cp ai/ \
-            s3://$BUCKET/$PREFIX/${{ steps.meta.outputs.timestamp }} \
+          # 버전 폴더에 저장 (버전당 하나)
+          aws s3 cp artifact/ \
+            s3://$BUCKET/$PREFIX/${{ needs.build.outputs.version }}/ \
+            --recursive
+
+          # latest 폴더에 덮어쓰기 (최신 릴리즈)
+          aws s3 cp artifact/ \
+            s3://$BUCKET/$PREFIX/latest/ \
             --recursive

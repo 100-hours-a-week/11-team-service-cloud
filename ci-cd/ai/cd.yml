@@ -2,11 +2,12 @@ name: FastAPI CD
 
 on:
   workflow_run:
-    workflows: ["FastAPI CI"]
-    types: [completed]
-    branches: [develop]
+    workflows: [ "FastAPI CI" ]
+    types: [ completed ]
+    branches: [ develop ]
 
 permissions:
+  id-token: write
   contents: read
   actions: read
 
@@ -16,38 +17,90 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
-      - name: Download artifact from CI
-        uses: actions/download-artifact@v4
+      # ----------------------------
+      # 1. AWS 인증
+      # ----------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          name: verified-ai-source
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ github.token }}
-          path: ./ai
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ap-northeast-2
+          
+      # ----------------------------
+      # 2. S3에서 최신 artifact 다운로드
+      # ----------------------------
+      - name: Download artifact from S3
+        env:
+          BUCKET: ${{ secrets.RELEASE_BUCKET }}
+          PREFIX: releases/ai
+        run: |
+          rm -rf ./artifact
+          mkdir -p ./artifact
 
-      - name: List AI files
-        run: ls -la ai && find ai -maxdepth 2 -type f | head
+          # latest 폴더에서 artifact 동기화
+          aws s3 cp "s3://$BUCKET/$PREFIX/latest/" ./artifact/ --recursive
 
-      - name: Deploy AI source to Dev Server
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.DEV_HOST }}
-          username: ${{ secrets.DEV_USER }}
-          key: ${{ secrets.DEV_SSH_KEY }}
-          source: "ai/**"
-          target: "/home/ubuntu/ai"
-          strip_components: 1
+          echo "Downloaded from s3://$BUCKET/$PREFIX/latest/"
+          ls -la ./artifact | head
 
-      - name: Restart FastAPI (nohup example)
+      # ----------------------------
+      # 3. 서버로 배포 (백업/롤백 대비)
+      # ----------------------------
+      - name: Prepare server directories (backup)
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.DEV_HOST }}
           username: ${{ secrets.DEV_USER }}
           key: ${{ secrets.DEV_SSH_KEY }}
           script: |
+            set -e
+            echo "=== FastAPI Deploy Start ==="
+
+            TARGET_DIR="/home/ubuntu/ai"
+            BACKUP_DIR="/home/ubuntu/ai_backup"
+
+            # 백업 (롤백 대비)
+            rm -rf "$BACKUP_DIR"
+            if [ -d "$TARGET_DIR" ]; then
+              cp -r "$TARGET_DIR" "$BACKUP_DIR"
+              echo "Backup completed"
+            fi
+
+            # 기존 파일 제거
+            rm -rf "$TARGET_DIR"
+            mkdir -p "$TARGET_DIR"
+
+      - name: List AI files
+        run: ls -la artifact && find artifact -maxdepth 2 -type f | head
+
+      # ----------------------------
+      # 4. artifact 업로드
+      # ----------------------------
+      - name: Upload artifact files
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          source: "artifact/**"
+          target: "/home/ubuntu/ai"
+          strip_components: 1
+
+      # ----------------------------
+      # 5. FastAPI Restart + Health Check
+      # ----------------------------
+      - name: Restart FastAPI
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          script: |
+            set -euo pipefail
             cd /home/ubuntu/ai
 
             # uv 설치 (없으면)
-            if ! command -v uv &> /dev/null; then
+            if ! command -v uv >/dev/null 2>&1; then
               curl -LsSf https://astral.sh/uv/install.sh | sh
               export PATH="$HOME/.local/bin:$PATH"
             fi
@@ -55,14 +108,98 @@ jobs:
             # 의존성 설치/업데이트
             uv sync
 
-            # 기존 프로세스 종료 (uvicorn 기준)
-            pkill -f "uvicorn" || true
-            sleep 2
+            # 기존 프로세스 종료 (PID 파일 사용)
+            if [ -f uvicorn.pid ]; then
+              OLD_PID=$(cat uvicorn.pid)
+              if ps -p "$OLD_PID" >/dev/null 2>&1; then
+                kill "$OLD_PID" || true
+                sleep 3
+              fi
+              rm -f uvicorn.pid
+            fi
 
-            # 새 버전 실행
+            # 새로 실행하고 PID 저장
             nohup uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 > ai.log 2>&1 &
-            echo "FastAPI restarted"
+            echo $! > uvicorn.pid
+            echo "FastAPI restarted (PID: $(cat uvicorn.pid))"
 
+      - name: Health check
+        id: health_check
+        uses: appleboy/ssh-action@master
+        continue-on-error: true
+        with:
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          script: |
+            echo "Health Check 시작 (10초 대기)..."
+            sleep 10
+
+            # 3회 재시도 (10초 간격)
+            for i in 1 2 3; do
+              echo "Health Check 시도 $i/3"
+              if curl -sf http://localhost:8000 > /dev/null; then
+                echo "Health Check 성공"
+                exit 0
+              fi
+              sleep 10
+            done
+
+            echo "Health Check 실패"
+            exit 1
+
+      # ----------------------------
+      # 6. Rollback
+      # ----------------------------
+      - name: Rollback on failure
+        if: steps.health_check.outcome == 'failure'
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          script: |
+            set -e
+            TARGET_DIR="/home/ubuntu/ai"
+            BACKUP_DIR="/home/ubuntu/ai_backup"
+
+            # 현재 프로세스 종료
+            if [ -f "$TARGET_DIR/uvicorn.pid" ]; then
+              OLD_PID=$(cat "$TARGET_DIR/uvicorn.pid")
+              if ps -p "$OLD_PID" >/dev/null 2>&1; then
+                kill "$OLD_PID" || true
+                sleep 3
+              fi
+              rm -f "$TARGET_DIR/uvicorn.pid"
+            fi
+
+            # 백업 복구
+            if [ -d "$BACKUP_DIR" ]; then
+              rm -rf "$TARGET_DIR"
+              mv "$BACKUP_DIR" "$TARGET_DIR"
+              echo "Rollback completed"
+            else
+              echo "Rollback failed: no backup"
+              exit 1
+            fi
+
+            # 롤백 후 재시작
+            cd "$TARGET_DIR"
+
+            if ! command -v uv >/dev/null 2>&1; then
+              curl -LsSf https://astral.sh/uv/install.sh | sh
+              export PATH="$HOME/.local/bin:$PATH"
+            fi
+
+            uv sync
+
+            nohup uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 > ai.log 2>&1 &
+            echo $! > uvicorn.pid
+            echo "FastAPI restarted after rollback (PID: $(cat uvicorn.pid))"
+
+      # ----------------------------
+      # 7. Discord 알림
+      # ----------------------------
       - name: Notify Discord - Success
         if: success()
         uses: sarisia/actions-status-discord@v1
@@ -70,7 +207,7 @@ jobs:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
           status: success
           title: "🚀 AI 배포 성공"
-          description: "FastAPI dev 서버 재시작 완료"
+          description: "S3 latest 기반 배포 완료"
 
       - name: Notify Discord - Failure
         if: failure()
@@ -79,4 +216,4 @@ jobs:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
           status: failure
           title: "🚨 AI 배포 실패"
-          description: "FastAPI dev 배포 중 오류 발생"
+          description: "Health check 실패 또는 배포 중 오류 발생"
