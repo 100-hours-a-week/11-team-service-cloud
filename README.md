@@ -6,30 +6,35 @@ Ubuntu 서버 초기 환경 구성, 빌드, 배포를 위한 인프라 스크립
 
 ```
 cloud/
-├── Makefile
+├── Makefile              # 명령어 인터페이스
 ├── .env.example          # 환경변수 템플릿
-├── .gitignore
 ├── configs/
 │   └── nginx/default.conf
-└── scripts/
-    ├── setup/
-    │   ├── setup.sh            # 전체 환경 세팅
-    │   ├── setup-source.sh     # 소스코드 + 개발 환경
-    │   ├── setup-mysql.sh      # MySQL만
-    │   ├── install/            # 패키지 설치
-    │   │   ├── aws-cli.sh
-    │   │   ├── nginx.sh
-    │   │   ├── java.sh
-    │   │   ├── node.sh
-    │   │   ├── python.sh
-    │   │   └── mysql.sh
-    │   └── config/             # 설정 적용
-    │       ├── nginx.sh
-    │       └── mysql.sh
-    ├── build/
-    │   └── build.sh            # FE + BE + AI 빌드
-    └── deploy/
-        └── deploy.sh           # 서비스 start/stop/restart
+├── scripts/
+│   ├── setup/
+│   │   ├── setup.sh            # 전체 환경 세팅
+│   │   ├── setup-source.sh     # 소스코드 + 개발 환경
+│   │   ├── setup-mysql.sh      # MySQL만
+│   │   ├── install/            # 패키지 설치
+│   │   │   ├── aws-cli.sh
+│   │   │   ├── nginx.sh
+│   │   │   ├── java.sh
+│   │   │   ├── node.sh
+│   │   │   ├── python.sh
+│   │   │   └── mysql.sh
+│   │   └── config/             # 설정 적용
+│   │       ├── nginx.sh
+│   │       └── mysql.sh
+│   └── deploy/
+│       └── deploy.sh           # 서비스 start/stop/restart
+├── ci-cd/                      # GitHub Actions 워크플로우
+│   ├── ai/                     # AI 서비스 CI/CD
+│   ├── backend/                # 백엔드 CI/CD
+│   └── frontend/               # 프론트엔드 CI/CD
+└── terraform/                  # IaC 설정 (AWS 인프라)
+    ├── main.tf
+    ├── provider.tf
+    └── terraform.tf
 ```
 
 ## 시작하기
@@ -46,20 +51,19 @@ vi .env  # 환경에 맞게 수정
 ## 사용법
 
 ```bash
-make help            # 명령어 목록
+make help              # 명령어 목록
 
 # 환경 세팅
-make setup-all       # 전체 환경 (Git, Nginx, Java, Node, Python, MySQL)
-make setup-source    # 소스코드 클론 + 개발 환경
-make setup-mysql     # MySQL만
-
-# 빌드
-make build-all       # FE + BE + AI 빌드
+make setup-all         # 전체 환경 (Git, Nginx, Java, Node, Python, MySQL)
+make setup-source      # 소스코드 클론 + 개발 환경
+make setup-mysql       # MySQL만
 
 # 배포
-make deploy-all      # 재시작 (stop → start)
-make deploy-start    # 시작
-make deploy-stop     # 종료
+make deploy            # S3에서 다운로드 + 재시작 (배포)
+make deploy-download   # S3에서 JAR 다운로드만
+make deploy-all        # 재시작 (stop → start)
+make deploy-start      # 시작
+make deploy-stop       # 종료
 ```
 
 ## 기술 스택
@@ -93,10 +97,31 @@ Client → Nginx(:443) → /api/*  → Spring Boot(:8080)
 | `DB_SCHEMA`     | MySQL 데이터베이스명    |
 | `DB_USER`       | MySQL 유저명            |
 | `DB_PASSWORD`   | MySQL 비밀번호          |
-| `BACKEND_JAR`   | Spring Boot JAR 파일명  |
+| `S3_BUCKET`     | 릴리즈 S3 버킷명        |
+| `S3_BACKEND_PREFIX` | S3 백엔드 아티팩트 경로 |
+| `SERVER_ENV_PATH`   | 서버 환경변수 파일 경로 |
 
 버전 관련 변수(`JDK_VERSION`, `NODE_VERSION` 등)도 `.env`에서 관리됩니다.
 
 ## 자동 배포 (CI/CD)
 
-이 프로젝트는 GitHub Actions를 사용하여 각 서비스(Frontend, Backend, AI)의 독립적인 자동 배포를 지원합니다. `main` 브랜치에 코드가 푸시되면 해당 서비스의 배포 파이프라인이 자동으로 실행됩니다.
+GitHub Actions를 사용하여 각 서비스(Frontend, Backend, AI)의 독립적인 자동 배포를 지원합니다.
+
+| 서비스 | CI 워크플로우 | CD 워크플로우 |
+|--------|---------------|---------------|
+| Frontend | `ci-cd/frontend/ci.yml` | `ci-cd/frontend/cd.yml` |
+| Backend | `ci-cd/backend/ci.yml` | `ci-cd/backend/cd.yml` |
+| AI | `ci-cd/ai/ci.yml` | `ci-cd/ai/cd.yml` |
+
+`main` 브랜치에 코드가 푸시되면 해당 서비스의 배포 파이프라인이 자동으로 실행됩니다.
+
+## Terraform (IaC)
+
+AWS 인프라를 코드로 관리합니다.
+
+```bash
+cd terraform
+terraform init      # 초기화
+terraform plan      # 변경 사항 미리보기
+terraform apply     # 인프라 적용
+```
