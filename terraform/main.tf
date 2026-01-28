@@ -250,3 +250,15 @@ resource "aws_instance" "bigbang_instance" {
     Name = "bigbang_instance"
   }
 }
+
+resource "aws_eip" "bigbang" {
+  domain = "vpc"
+  tags = {
+    Name = "bigbang-eip"
+  }
+}
+
+resource "aws_eip_association" "bigbang" {
+  allocation_id = aws_eip.bigbang.id
+  instance_id   = aws_instance.bigbang_instance.id
+}
