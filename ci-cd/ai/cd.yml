@@ -87,7 +87,7 @@ jobs:
           strip_components: 1
 
       # ----------------------------
-      # 5. FastAPI Restart + Health Check
+      # 5. FastAPI Restart
       # ----------------------------
       - name: Restart FastAPI
         uses: appleboy/ssh-action@master
@@ -122,7 +122,10 @@ jobs:
             nohup uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 > ai.log 2>&1 &
             echo $! > uvicorn.pid
             echo "FastAPI restarted (PID: $(cat uvicorn.pid))"
-
+			
+			# ----------------------------
+      # 6. Health Check
+      # ----------------------------
       - name: Health check
         id: health_check
         uses: appleboy/ssh-action@master
@@ -149,7 +152,7 @@ jobs:
             exit 1
 
       # ----------------------------
-      # 6. Rollback
+      # 7. Rollback
       # ----------------------------
       - name: Rollback on failure
         if: steps.health_check.outcome == 'failure'
@@ -198,7 +201,7 @@ jobs:
             echo "FastAPI restarted after rollback (PID: $(cat uvicorn.pid))"
 
       # ----------------------------
-      # 7. Discord 알림
+      # 8. Discord 알림
       # ----------------------------
       - name: Notify Discord - Success
         if: success()
