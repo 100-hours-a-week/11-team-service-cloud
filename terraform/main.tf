@@ -197,7 +197,7 @@ resource "aws_instance" "bigbang_instance" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = "t3.medium"
   subnet_id              = aws_subnet.prod_public_a.id
-  key_name               = "kateboo-11team.pem"
+  key_name               = "kateboo-11team"
   vpc_security_group_ids = [aws_security_group.ssh.id]
   ipv6_address_count     = 1
   iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
