@@ -17,11 +17,11 @@ data "aws_ami" "ubuntu" {
 resource "aws_instance" "bigbang_instance" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = "t3.medium"
-  subnet_id              = aws_subnet.prod_public_a.id
+  subnet_id              = var.subnet_id
   key_name               = "kateboo-11team"
-  vpc_security_group_ids = [aws_security_group.bigbang.id]
+  vpc_security_group_ids = [var.security_group_id]
   ipv6_address_count     = 1
-  iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
+  iam_instance_profile   = var.iam_instance_profile_name
 
   root_block_device {
     volume_size           = 20
