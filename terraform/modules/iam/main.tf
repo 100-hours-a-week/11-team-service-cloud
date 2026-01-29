@@ -1,3 +1,6 @@
+data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
+
 # EC2 인스턴스가 Parameter Store에 접근할 수 있도록 IAM 역할 생성
 
 # IAM 역할 생성
@@ -37,7 +40,7 @@ resource "aws_iam_role_policy" "ssm_read_policy" {
           "ssm:GetParameters",
           "ssm:GetParametersByPath"
         ]
-        Resource = "arn:aws:ssm:ap-northeast-2:*:parameter/bigbang/*"
+        Resource = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/bigbang/*"
       }
     ]
   })
@@ -50,24 +53,30 @@ resource "aws_iam_role_policy" "s3_read_policy" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:ListBucket",
-          "s3:GetBucketLocation"
-        ]
-        Resource = "arn:aws:s3:::*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:GetObjectVersion"
-        ]
-        Resource = "arn:aws:s3:::*/*"
-      }
-    ]
+    Statement = concat(
+      # ListBucket 권한 (bucket 단위)
+      [
+        for bucket in var.deployment_buckets : {
+          Effect = "Allow"
+          Action = [
+            "s3:ListBucket",
+            "s3:GetBucketLocation"
+          ]
+          Resource = "arn:aws:s3:::${bucket}"
+        }
+      ],
+      # GetObject 권한 (object 단위)
+      [
+        for bucket in var.deployment_buckets : {
+          Effect = "Allow"
+          Action = [
+            "s3:GetObject",
+            "s3:GetObjectVersion"
+          ]
+          Resource = "arn:aws:s3:::${bucket}/*"
+        }
+      ]
+    )
   })
 }
 
