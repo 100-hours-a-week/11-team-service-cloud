@@ -53,24 +53,30 @@ resource "aws_iam_role_policy" "s3_read_policy" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:ListBucket",
-          "s3:GetBucketLocation"
-        ]
-        Resource = "arn:aws:s3:::*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:GetObjectVersion"
-        ]
-        Resource = "arn:aws:s3:::*/*"
-      }
-    ]
+    Statement = concat(
+      # ListBucket 권한 (bucket 단위)
+      [
+        for bucket in var.deployment_buckets : {
+          Effect = "Allow"
+          Action = [
+            "s3:ListBucket",
+            "s3:GetBucketLocation"
+          ]
+          Resource = "arn:aws:s3:::${bucket}"
+        }
+      ],
+      # GetObject 권한 (object 단위)
+      [
+        for bucket in var.deployment_buckets : {
+          Effect = "Allow"
+          Action = [
+            "s3:GetObject",
+            "s3:GetObjectVersion"
+          ]
+          Resource = "arn:aws:s3:::${bucket}/*"
+        }
+      ]
+    )
   })
 }
 

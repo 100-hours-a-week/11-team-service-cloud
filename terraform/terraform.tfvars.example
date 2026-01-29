@@ -1,0 +1,5 @@
+# terraform.tfvars.example
+# terraform.tfvars에서는 실제 배포에 사용할 bucket 이름으로 변경하세요
+# cp terraform.tfvars.example terraform.tfvars 후 수정
+
+deployment_buckets = ["your-deployment-bucket"]

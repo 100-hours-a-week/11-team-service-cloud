@@ -2,6 +2,8 @@
 
 module "iam" {
   source = "./modules/iam"
+
+  deployment_buckets = var.deployment_buckets
 }
 
 module "network" {

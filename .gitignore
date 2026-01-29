@@ -1,1 +1,9 @@
 .env
+# Terraform
+terraform.tfvars
+*.tfvars
+*.tfvars.json
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
