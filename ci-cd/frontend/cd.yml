@@ -47,6 +47,11 @@ jobs:
         id: meta
         run: echo "release=$(TZ='Asia/Seoul' date -u +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
       
+      - name: Setup WireGuard
+        uses: niklaskeerl/easy-wireguard-action@v2
+        with:
+          WG_CONFIG_FILE: ${{ secrets.WG_CONFIG }}
+      
       # ----------------------------
       # 3. 서버로 배포
       # ----------------------------
