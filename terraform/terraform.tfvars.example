@@ -3,3 +3,8 @@
 # cp terraform.tfvars.example terraform.tfvars 후 수정
 
 deployment_buckets = ["your-deployment-bucket"]
+
+# Optional: limit SSH access to specific CIDRs
+# allowed_ssh_cidrs = ["203.0.113.5/32"]  # 예: 단일 IP만 허용
+# or
+# allowed_ssh_cidrs = ["203.0.113.0/24", "198.51.100.0/24"]  # 여러 CIDR 허용

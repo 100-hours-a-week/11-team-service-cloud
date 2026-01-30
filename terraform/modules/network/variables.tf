@@ -10,4 +10,8 @@ variable "region" {
   default     = "ap-northeast-2"
 }
 
-
+variable "allowed_ssh_cidrs" {
+  description = "List of CIDR blocks allowed for SSH"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
