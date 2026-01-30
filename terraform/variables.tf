@@ -9,3 +9,8 @@ variable "allowed_ssh_cidrs" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }
+
+variable "ssh_key_name" {
+  description = "Name of the EC2 key pair to use for SSH"
+  type        = string
+}

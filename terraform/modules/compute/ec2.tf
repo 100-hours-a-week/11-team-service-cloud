@@ -18,7 +18,7 @@ resource "aws_instance" "bigbang_instance" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = "t3.medium"
   subnet_id              = var.subnet_id
-  key_name               = "kateboo-11team"
+  key_name               = var.key_name
   vpc_security_group_ids = [var.security_group_id]
   ipv6_address_count     = 1
   iam_instance_profile   = var.iam_instance_profile_name
