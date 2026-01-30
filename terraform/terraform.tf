@@ -8,6 +8,8 @@ module "iam" {
 
 module "network" {
   source = "./modules/network"
+
+  allowed_ssh_cidrs = var.allowed_ssh_cidrs
 }
 
 module "compute" {
