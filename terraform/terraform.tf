@@ -19,6 +19,8 @@ module "compute" {
   subnet_id                 = module.network.public_subnet_a_id
   security_group_id         = module.network.security_group_id
   iam_instance_profile_name = module.iam.iam_instance_profile_name
+
+  key_name = var.ssh_key_name
 }
 
 # EIP 할당 (root level에서 관리하여 순환참조 방지)
