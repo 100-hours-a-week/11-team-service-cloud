@@ -4,7 +4,7 @@ on:
   workflow_run:
     workflows: [ "FastAPI CI" ]
     types: [ completed ]
-    branches: [ develop ]
+    branches: [ develop, main ]
 
 permissions:
   id-token: write
@@ -43,6 +43,11 @@ jobs:
           echo "Downloaded from s3://$BUCKET/$PREFIX/latest/"
           ls -la ./artifact | head
 
+      - name: Setup WireGuard
+        uses: niklaskeerl/easy-wireguard-action@v2
+        with:
+          WG_CONFIG_FILE: ${{ secrets.WG_CONFIG }}
+    
       # ----------------------------
       # 3. 서버로 배포 (백업/롤백 대비)
       # ----------------------------
@@ -72,7 +77,7 @@ jobs:
 
       - name: List AI files
         run: ls -la artifact && find artifact -maxdepth 2 -type f | head
-
+          
       # ----------------------------
       # 4. artifact 업로드
       # ----------------------------
@@ -86,9 +91,9 @@ jobs:
           target: "/home/ubuntu/ai"
           strip_components: 1
 
-      # ----------------------------
-      # 5. FastAPI Restart
-      # ----------------------------
+      # --------------------------------- 
+      # 5. FastAPI Restart + Health Check
+      # ---------------------------------
       - name: Restart FastAPI
         uses: appleboy/ssh-action@master
         with:
@@ -122,10 +127,7 @@ jobs:
             nohup uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 > ai.log 2>&1 &
             echo $! > uvicorn.pid
             echo "FastAPI restarted (PID: $(cat uvicorn.pid))"
-			
-			# ----------------------------
-      # 6. Health Check
-      # ----------------------------
+
       - name: Health check
         id: health_check
         uses: appleboy/ssh-action@master
@@ -152,7 +154,7 @@ jobs:
             exit 1
 
       # ----------------------------
-      # 7. Rollback
+      # 6. Rollback
       # ----------------------------
       - name: Rollback on failure
         if: steps.health_check.outcome == 'failure'
@@ -201,7 +203,7 @@ jobs:
             echo "FastAPI restarted after rollback (PID: $(cat uvicorn.pid))"
 
       # ----------------------------
-      # 8. Discord 알림
+      # 7. Discord 알림
       # ----------------------------
       - name: Notify Discord - Success
         if: success()
