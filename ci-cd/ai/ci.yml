@@ -120,7 +120,7 @@ jobs:
         continue-on-error: true
 
   # ----------------------------
-  # 4. Main -> S3 Release Archive (develop)
+  # 4. Main -> S3 snapshot Archive (develop)
   # ----------------------------
   snapshot_archive:
     name: Archive to S3
