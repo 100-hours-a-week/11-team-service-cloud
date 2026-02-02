@@ -29,22 +29,13 @@ resource "aws_security_group" "bigbang" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # HTTPS for package updates and API calls
+  # Allow all outbound traffic
   egress {
-    description = "HTTPS outbound"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  
-  # Database access within VPC
-  egress {
-    description = "Database access"
-    from_port   = 3306
-    to_port     = 3306
-    protocol    = "tcp"
-    cidr_blocks = [var.vpc_cidr]
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
   }
 
   tags = {
