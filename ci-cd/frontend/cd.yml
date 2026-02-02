@@ -6,8 +6,8 @@ on:
     branches: [develop, main]
     paths-ignore:
       - "**.md"
-      # - ".github/**"
-      # - ".git*"
+      - ".github/**"
+      - ".git*"
 
 permissions:
   id-token: write
