@@ -7,8 +7,8 @@ on:
     types: [opened, synchronize, reopened]
     paths-ignore:
       - "**.md" # 문서 변경 무시
-      # - ".github/**" # 워크플로우 변경 무시
-      # - ".git*" # Git 설정 변경 무시
+      - ".github/**" # 워크플로우 변경 무시
+      - ".git*" # Git 설정 변경 무시
 
 permissions:
   id-token: write # required to get OIDC token
