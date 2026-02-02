@@ -69,6 +69,13 @@ jobs:
       - name: Import Check
         run: uv run python -c "import api.main"
 
+      
+      - name: Debug - confirm .env exists
+        run: |
+          pwd
+          ls -al .env
+          head -n 3 .env
+
       - name: Set metadata (artifact name / version)
         id: meta
         run: |
@@ -82,11 +89,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.meta.outputs.artifact_name }}
+          include-hidden-files: true
+          if-no-files-found: error
           path: |
-            api/**
-            shared/**
-            pipelines/**
-            **/*.py
+            api
+            shared
+            pipelines
             pyproject.toml
             uv.lock
             pytest.ini
@@ -199,6 +207,16 @@ jobs:
           name: ${{ needs.build.outputs.artifact_name }}
           path: artifact
 
+      - name: Debug - confirm .env before S3 upload
+        run: |
+          echo "== local files =="
+          ls -al artifact
+          echo "== check .env =="
+          ls -al artifact/.env
+          echo "== size =="
+          wc -c artifact/.env
+
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -236,6 +254,15 @@ jobs:
         with:
           name: ${{ needs.build.outputs.artifact_name }}
           path: artifact
+
+      - name: Debug - confirm .env before S3 upload
+        run: |
+          echo "== local files =="
+          ls -al artifact
+          echo "== check .env =="
+          ls -al artifact/.env
+          echo "== size =="
+          wc -c artifact/.env
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
