@@ -21,7 +21,7 @@ jobs:
   deploy_dev:
     name: Deploy Frontend to Dev Server
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/develop'
 
     steps:
       # ----------------------------
@@ -39,12 +39,11 @@ jobs:
       - name: Download artifact from S3
         env:
           BUCKET: ${{ secrets.RELEASE_BUCKET }}
-          PREFIX: releases/frontend
+          PREFIX: snapshots/frontend
         run: |
           rm -rf ./dist
           mkdir -p ./dist
 
-          # latest 폴더에서 dist 동기화
           aws s3 cp "s3://$BUCKET/$PREFIX/latest/" ./dist/ --recursive
 
           echo "Downloaded from s3://$BUCKET/$PREFIX/latest/"
@@ -71,12 +70,14 @@ jobs:
             TARGET_DIR="/var/www/frontend"
             BACKUP_DIR="/var/www/frontend_backup"
 
+            # 백업 (롤백 대비)
             sudo rm -rf $BACKUP_DIR
             if [ -d "$TARGET_DIR" ]; then
               sudo cp -r $TARGET_DIR $BACKUP_DIR
               echo "Backup completed"
             fi
 
+            # 기존 파일 제거
             sudo rm -rf $TARGET_DIR
             sudo mkdir -p $TARGET_DIR
 
