@@ -2,11 +2,14 @@
 
 > **Version:** v0.0.3
 
-#### 0. 구조
-#### 1. CI/CD 파이프라인
-#### 2. Terraform 사용 인프라 구축, Ubuntu 서버 초기 환경 구성, 빌드, 배포를 위한 인프라 스크립트 가이드
+1. 개요
+2. Quick Start
+3. CI/CD 
+4. Terraform (IaC) - 인프라 구축
+5. 환경 변수
 
-# 0. 구조
+# 1. 개요
+## 구조
 
 ```
 cloud/
@@ -20,30 +23,26 @@ cloud/
 └── terraform/               # IaC (modules: network, compute, iam)
 ```
 
-# 1. CI/CD 파이프라인 
-## 자동 배포 (CI/CD)
+## 기술 스택
 
-GitHub Actions를 사용하여 각 서비스(Frontend, Backend, AI)의 독립적인 자동 배포를 지원합니다.
+| 구분           | 버전   |
+| -------------- | ------ |
+| Java (OpenJDK) | 21     |
+| Node.js        | 22     |
+| Python         | 3.11   |
+| MySQL          | 8.0.44 |
+| Nginx          | 1.28.1 |
+| AWS CLI        | 2.x    |
 
-| 서비스 | CI 워크플로우 | CD 워크플로우 |
-|--------|---------------|---------------|
-| Frontend | `ci-cd/frontend/ci.yml` | `ci-cd/frontend/cd.yml` |
-| Backend | `ci-cd/backend/ci.yml` | `ci-cd/backend/cd.yml` |
-| AI | `ci-cd/ai/ci.yml` | `ci-cd/ai/cd.yml` |
+## 아키텍처
 
-`main` 브랜치에 코드가 푸시되면 해당 서비스의 배포 파이프라인이 자동으로 실행됩니다.
-
-## CI 파이프라인 
-<div align="center">
-<img width="600" align="center" alt="ci drawio" src="https://github.com/user-attachments/assets/cf9615f5-bf67-4196-8af4-1d114dc2412f" />
-</div>
-
-## CD 파이프라인
-<div align="center">
-<img width="600"  alt="cd" src="https://github.com/user-attachments/assets/99d33119-412c-4c2a-b06f-5da791d1f474" />
-</div>
-
-# 2. Terraform 사용 인프라 구축, Ubuntu 서버 초기 환경 구성, 빌드, 배포를 위한 인프라 스크립트 가이드
+```
+Client → Nginx(:443) → /api/*  → Spring Boot(:8080)
+                     → /*      → React Static (/var/www/frontend/build)
+                                  FastAPI(:8000)
+```
+# 2. Quick Start
+Ubuntu 서버 초기 환경 구성, 빌드, 배포를 위한 인프라 스크립트 가이드
 ## 사전 요구사항
 
 시작하기 전에 아래 항목들을 준비해야 합니다:
@@ -99,93 +98,29 @@ make deploy-start      # 시작
 make deploy-stop       # 종료
 ```
 
-## 기술 스택
 
-| 구분           | 버전   |
-| -------------- | ------ |
-| Java (OpenJDK) | 21     |
-| Node.js        | 22     |
-| Python         | 3.11   |
-| MySQL          | 8.0.44 |
-| Nginx          | 1.28.1 |
-| AWS CLI        | 2.x    |
+# 3. CI/CD
+GitHub Actions를 사용하여 각 서비스(Frontend, Backend, AI)의 독립적인 자동 배포를 지원합니다.
 
-## 아키텍처
+| 서비스 | CI 워크플로우 | CD 워크플로우 |
+|--------|---------------|---------------|
+| Frontend | `ci-cd/frontend/ci.yml` | `ci-cd/frontend/cd.yml` |
+| Backend | `ci-cd/backend/ci.yml` | `ci-cd/backend/cd.yml` |
+| AI | `ci-cd/ai/ci.yml` | `ci-cd/ai/cd.yml` |
 
-```
-Client → Nginx(:443) → /api/*  → Spring Boot(:8080)
-                     → /*      → React Static (/var/www/frontend/build)
-                                  FastAPI(:8000)
-```
+`main` 브랜치에 코드가 푸시되면 해당 서비스의 배포 파이프라인이 자동으로 실행됩니다.
 
-## 환경변수
+## CI 파이프라인 
+<div align="center">
+<img width="600" align="center" alt="ci drawio" src="https://github.com/user-attachments/assets/cf9615f5-bf67-4196-8af4-1d114dc2412f" />
+</div>
 
-`.env.example`을 복사하여 `.env`를 생성하고 환경에 맞게 수정:
+## CD 파이프라인
+<div align="center">
+<img width="600"  alt="cd" src="https://github.com/user-attachments/assets/99d33119-412c-4c2a-b06f-5da791d1f474" />
+</div>
 
-| 변수                | 설명                           |
-| ------------------- | ------------------------------ |
-| `JDK_VERSION`       | Java 버전 (기본: 21)           |
-| `NODE_VERSION`      | Node.js 버전 (기본: 22)        |
-| `PYTHON_VERSION`    | Python 버전 (기본: 3.11)       |
-| `MYSQL_VERSION`     | MySQL 버전 (기본: 8.0.44)      |
-| `NGINX_VERSION`     | Nginx 버전 (기본: 1.28.1)      |
-| `DB_SCHEMA`         | MySQL 데이터베이스명           |
-| `DB_USER`           | MySQL 유저명                   |
-| `DB_PASSWORD`       | MySQL 비밀번호                 |
-| `SERVER_ENV_PATH`   | 서버 환경변수 파일 경로        |
-| `SERVICE_DOMAIN`    | 서비스 도메인                  |
-| `CERTBOT_EMAIL`     | SSL 인증서 발급용 이메일       |
-| `S3_BUCKET`         | 릴리즈 S3 버킷명               |
-| `S3_BACKEND_PREFIX` | S3 백엔드 아티팩트 경로        |
-
-### AWS Parameter Store 사용 (프로덕션 환경)
-
-프로덕션 환경에서는 `.env` 파일을 AWS Parameter Store에 저장하여 안전하게 관리합니다.
-
-#### 1. .env 파일 생성 및 수정
-
-```bash
-cd cloud
-cp .env.example .env
-vi .env  # 실제 값으로 수정
-```
-
-#### 2. Parameter Store에 저장
-
-```bash
-aws ssm put-parameter \
-  --name "/bigbang/dot-env" \
-  --value "$(cat .env)" \
-  --type "SecureString" \
-  --region ap-northeast-2 \
-  --description "BigBang service .env configuration"
-```
-
-#### 3. 저장 확인
-
-```bash
-aws ssm get-parameter \
-  --name "/bigbang/dot-env" \
-  --with-decryption \
-  --region ap-northeast-2 \
-  --query 'Parameter.Value' \
-  --output text
-```
-
-#### 4. 값 업데이트
-
-```bash
-aws ssm put-parameter \
-  --name "/bigbang/dot-env" \
-  --value "$(cat .env)" \
-  --type "SecureString" \
-  --region ap-northeast-2 \
-  --overwrite
-```
-
-Terraform으로 EC2 인스턴스를 생성하면 user_data에서 자동으로 Parameter Store에서 `.env`를 가져와 사용합니다.
-
-## Terraform (IaC)
+# 4. Terraform (IaC) - 인프라 구축
 
 AWS 인프라를 코드로 관리합니다. 모듈화된 구조로 리소스를 관리합니다.
 
@@ -254,3 +189,70 @@ DNS 설정이 늦어지면 Certbot이 실패하며, 이 경우 인스턴스에 �
 ```bash
 sudo /home/ubuntu/cloud/scripts/setup/ssl/setup-ssl.sh
 ```
+
+# 5. 환경 변수
+
+`.env.example`을 복사하여 `.env`를 생성하고 환경에 맞게 수정:
+
+| 변수                | 설명                           |
+| ------------------- | ------------------------------ |
+| `JDK_VERSION`       | Java 버전 (기본: 21)           |
+| `NODE_VERSION`      | Node.js 버전 (기본: 22)        |
+| `PYTHON_VERSION`    | Python 버전 (기본: 3.11)       |
+| `MYSQL_VERSION`     | MySQL 버전 (기본: 8.0.44)      |
+| `NGINX_VERSION`     | Nginx 버전 (기본: 1.28.1)      |
+| `DB_SCHEMA`         | MySQL 데이터베이스명           |
+| `DB_USER`           | MySQL 유저명                   |
+| `DB_PASSWORD`       | MySQL 비밀번호                 |
+| `SERVER_ENV_PATH`   | 서버 환경변수 파일 경로        |
+| `SERVICE_DOMAIN`    | 서비스 도메인                  |
+| `CERTBOT_EMAIL`     | SSL 인증서 발급용 이메일       |
+| `S3_BUCKET`         | 릴리즈 S3 버킷명               |
+| `S3_BACKEND_PREFIX` | S3 백엔드 아티팩트 경로        |
+
+### AWS Parameter Store 사용 (프로덕션 환경)
+
+프로덕션 환경에서는 `.env` 파일을 AWS Parameter Store에 저장하여 안전하게 관리합니다.
+
+#### 1. .env 파일 생성 및 수정
+
+```bash
+cd cloud
+cp .env.example .env
+vi .env  # 실제 값으로 수정
+```
+
+#### 2. Parameter Store에 저장
+
+```bash
+aws ssm put-parameter \
+  --name "/bigbang/dot-env" \
+  --value "$(cat .env)" \
+  --type "SecureString" \
+  --region ap-northeast-2 \
+  --description "BigBang service .env configuration"
+```
+
+#### 3. 저장 확인
+
+```bash
+aws ssm get-parameter \
+  --name "/bigbang/dot-env" \
+  --with-decryption \
+  --region ap-northeast-2 \
+  --query 'Parameter.Value' \
+  --output text
+```
+
+#### 4. 값 업데이트
+
+```bash
+aws ssm put-parameter \
+  --name "/bigbang/dot-env" \
+  --value "$(cat .env)" \
+  --type "SecureString" \
+  --region ap-northeast-2 \
+  --overwrite
+```
+
+Terraform으로 EC2 인스턴스를 생성하면 user_data에서 자동으로 Parameter Store에서 `.env`를 가져와 사용합니다.
