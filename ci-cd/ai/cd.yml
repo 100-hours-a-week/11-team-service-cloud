@@ -126,20 +126,13 @@ jobs:
             # 의존성 설치/업데이트
             uv sync
 
-            # 기존 프로세스 종료 (PID 파일 사용)
-            if [ -f uvicorn.pid ]; then
-              OLD_PID=$(cat uvicorn.pid)
-              if ps -p "$OLD_PID" >/dev/null 2>&1; then
-                kill "$OLD_PID" || true
-                sleep 3
-              fi
-              rm -f uvicorn.pid
-            fi
+            # 기존 프로세스 종료 
+            kill $(lsof -t -i :8000) || true
+            sleep 3
 
             # 새로 실행하고 PID 저장
             nohup uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 > ai.log 2>&1 &
-            echo $! > uvicorn.pid
-            echo "FastAPI restarted (PID: $(cat uvicorn.pid))"
+            echo "FastAPI restarted (PID: $!)"
 
       # ----------------------------
       # 7. Health Check
@@ -185,14 +178,8 @@ jobs:
             BACKUP_DIR="/home/ubuntu/ai_backup"
 
             # 현재 프로세스 종료
-            if [ -f "$TARGET_DIR/uvicorn.pid" ]; then
-              OLD_PID=$(cat "$TARGET_DIR/uvicorn.pid")
-              if ps -p "$OLD_PID" >/dev/null 2>&1; then
-                kill "$OLD_PID" || true
-                sleep 3
-              fi
-              rm -f "$TARGET_DIR/uvicorn.pid"
-            fi
+            kill $(lsof -t -i :8000) || true
+            sleep 3
 
             # 백업 복구
             if [ -d "$BACKUP_DIR" ]; then
@@ -215,8 +202,7 @@ jobs:
             uv sync
 
             nohup uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 > ai.log 2>&1 &
-            echo $! > uvicorn.pid
-            echo "FastAPI restarted after rollback (PID: $(cat uvicorn.pid))"
+            echo "FastAPI restarted after rollback (PID: $!)"
 
       # ----------------------------
       # 9. Discord 알림
@@ -347,18 +333,13 @@ jobs:
 
             uv sync
 
-            if [ -f uvicorn.pid ]; then
-              OLD_PID=$(cat uvicorn.pid)
-              if ps -p "$OLD_PID" >/dev/null 2>&1; then
-                kill "$OLD_PID" || true
-                sleep 3
-              fi
-              rm -f uvicorn.pid
-            fi
+            # 기존 프로세스 종료
+            kill $(lsof -t -i :8000) || true
+            sleep 3
 
+            # 새로 실행
             nohup uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 > ai.log 2>&1 &
-            echo $! > uvicorn.pid
-            echo "FastAPI restarted (PID: $(cat uvicorn.pid))"
+            echo "FastAPI restarted (PID: $!)"
 
       # ----------------------------
       # 7. Health Check
@@ -402,14 +383,9 @@ jobs:
             TARGET_DIR="/home/ubuntu/ai"
             BACKUP_DIR="/home/ubuntu/ai_backup"
 
-            if [ -f "$TARGET_DIR/uvicorn.pid" ]; then
-              OLD_PID=$(cat "$TARGET_DIR/uvicorn.pid")
-              if ps -p "$OLD_PID" >/dev/null 2>&1; then
-                kill "$OLD_PID" || true
-                sleep 3
-              fi
-              rm -f "$TARGET_DIR/uvicorn.pid"
-            fi
+            # 현재 프로세스 종료
+            kill $(lsof -t -i :8000) || true
+            sleep 3
 
             # 백업 복구
             if [ -d "$BACKUP_DIR" ]; then
@@ -432,8 +408,7 @@ jobs:
             uv sync
 
             nohup uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 > ai.log 2>&1 &
-            echo $! > uvicorn.pid
-            echo "FastAPI restarted after rollback (PID: $(cat uvicorn.pid))"
+            echo "FastAPI restarted after rollback (PID: $!)"
 
       # ----------------------------
       # 9. Discord 알림
