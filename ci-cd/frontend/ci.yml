@@ -41,7 +41,14 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npm run build
+        run: |
+          if [ "${{ github.base_ref }}" == "develop" ]; then
+            echo "Building with develop mode..."
+            npm run build -- --mode develop
+          else
+            echo "Building with production mode..."
+            npm run build
+          fi
 
       - name: Set metadata (artifact name / dir / version)
         id: meta
