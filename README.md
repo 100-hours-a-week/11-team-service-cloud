@@ -2,7 +2,21 @@
 
 > **Version:** v0.0.3
 
-Ubuntu 서버 초기 환경 구성, 빌드, 배포를 위한 인프라 스크립트
+#### 1. CI/CD 파이프라인
+#### 2. Ubuntu 서버 초기 환경 구성, 빌드, 배포를 위한 인프라 스크립트
+
+# CI/CD 파이프라인 
+## CI 파이프라인 
+<div align="center">
+<img width="600" align="center" alt="ci drawio" src="https://github.com/user-attachments/assets/cf9615f5-bf67-4196-8af4-1d114dc2412f" />
+</div>
+
+## CD 파이프라인
+<div align="center">
+<img width="600"  alt="cd" src="https://github.com/user-attachments/assets/99d33119-412c-4c2a-b06f-5da791d1f474" />
+</div>
+
+# 2. Ubuntu 서버 초기 환경 구성, 빌드, 배포를 위한 인프라 스크립트
 
 ## 구조
 
