@@ -217,7 +217,7 @@ jobs:
       - name: Set meta
         id: meta
         run: |
-          echo "timestamp=$(TZ='Asia/Seoul' date -u +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+          echo "timestamp=$(TZ='Asia/Seoul' date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
 
       - name: Download built artifact
         uses: actions/download-artifact@v4
