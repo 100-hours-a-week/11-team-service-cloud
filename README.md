@@ -2,23 +2,11 @@
 
 > **Version:** v0.0.3
 
+#### 0. 구조
 #### 1. CI/CD 파이프라인
-#### 2. Ubuntu 서버 초기 환경 구성, 빌드, 배포를 위한 인프라 스크립트
+#### 2. Terraform 사용 인프라 구축, Ubuntu 서버 초기 환경 구성, 빌드, 배포를 위한 인프라 스크립트 가이드
 
-# CI/CD 파이프라인 
-## CI 파이프라인 
-<div align="center">
-<img width="600" align="center" alt="ci drawio" src="https://github.com/user-attachments/assets/cf9615f5-bf67-4196-8af4-1d114dc2412f" />
-</div>
-
-## CD 파이프라인
-<div align="center">
-<img width="600"  alt="cd" src="https://github.com/user-attachments/assets/99d33119-412c-4c2a-b06f-5da791d1f474" />
-</div>
-
-# 2. Ubuntu 서버 초기 환경 구성, 빌드, 배포를 위한 인프라 스크립트
-
-## 구조
+# 0. 구조
 
 ```
 cloud/
@@ -32,6 +20,30 @@ cloud/
 └── terraform/               # IaC (modules: network, compute, iam)
 ```
 
+# 1. CI/CD 파이프라인 
+## 자동 배포 (CI/CD)
+
+GitHub Actions를 사용하여 각 서비스(Frontend, Backend, AI)의 독립적인 자동 배포를 지원합니다.
+
+| 서비스 | CI 워크플로우 | CD 워크플로우 |
+|--------|---------------|---------------|
+| Frontend | `ci-cd/frontend/ci.yml` | `ci-cd/frontend/cd.yml` |
+| Backend | `ci-cd/backend/ci.yml` | `ci-cd/backend/cd.yml` |
+| AI | `ci-cd/ai/ci.yml` | `ci-cd/ai/cd.yml` |
+
+`main` 브랜치에 코드가 푸시되면 해당 서비스의 배포 파이프라인이 자동으로 실행됩니다.
+
+## CI 파이프라인 
+<div align="center">
+<img width="600" align="center" alt="ci drawio" src="https://github.com/user-attachments/assets/cf9615f5-bf67-4196-8af4-1d114dc2412f" />
+</div>
+
+## CD 파이프라인
+<div align="center">
+<img width="600"  alt="cd" src="https://github.com/user-attachments/assets/99d33119-412c-4c2a-b06f-5da791d1f474" />
+</div>
+
+# 2. Terraform 사용 인프라 구축, Ubuntu 서버 초기 환경 구성, 빌드, 배포를 위한 인프라 스크립트 가이드
 ## 사전 요구사항
 
 시작하기 전에 아래 항목들을 준비해야 합니다:
@@ -172,18 +184,6 @@ aws ssm put-parameter \
 ```
 
 Terraform으로 EC2 인스턴스를 생성하면 user_data에서 자동으로 Parameter Store에서 `.env`를 가져와 사용합니다.
-
-## 자동 배포 (CI/CD)
-
-GitHub Actions를 사용하여 각 서비스(Frontend, Backend, AI)의 독립적인 자동 배포를 지원합니다.
-
-| 서비스 | CI 워크플로우 | CD 워크플로우 |
-|--------|---------------|---------------|
-| Frontend | `ci-cd/frontend/ci.yml` | `ci-cd/frontend/cd.yml` |
-| Backend | `ci-cd/backend/ci.yml` | `ci-cd/backend/cd.yml` |
-| AI | `ci-cd/ai/ci.yml` | `ci-cd/ai/cd.yml` |
-
-`main` 브랜치에 코드가 푸시되면 해당 서비스의 배포 파이프라인이 자동으로 실행됩니다.
 
 ## Terraform (IaC)
 
