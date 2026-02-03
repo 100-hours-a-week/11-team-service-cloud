@@ -1,6 +1,6 @@
 # Cloud Infrastructure
 
-> **Version:** v0.0.3
+> **Version:** v1.0.0
 
 1. 개요
 2. Quick Start
