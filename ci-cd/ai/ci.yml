@@ -39,6 +39,15 @@ jobs:
 
       - name: Create .env file
         run: |
+          # Profile & Mock Configs (브랜치별 분기)
+          if [ "${{ github.base_ref }}" == "main" ] || [ "${{ github.ref_name }}" == "main" ]; then
+            echo "PROFILE=${{ secrets.PROD_PROFILE }}" >> .env
+            echo "USE_MOCK=false" >> .env
+          else
+            echo "PROFILE=${{ secrets.DEV_PROFILE }}" >> .env
+            echo "USE_MOCK=${{ secrets.DEV_USE_MOCK }}" >> .env
+          fi
+
           # Weaviate Configs
           echo "WEAVIATE_HOST=${{ secrets.WEAVIATE_HOST }}" >> .env
           echo "WEAVIATE_PORT=${{ secrets.WEAVIATE_PORT }}" >> .env
@@ -121,6 +130,15 @@ jobs:
           
       - name: Create .env file
         run: |
+          # Profile & Mock Configs (브랜치별 분기)
+          if [ "${{ github.base_ref }}" == "main" ] || [ "${{ github.ref_name }}" == "main" ]; then
+            echo "PROFILE=${{ secrets.PROD_PROFILE }}" >> .env
+            echo "USE_MOCK=false" >> .env
+          else
+            echo "PROFILE=${{ secrets.DEV_PROFILE }}" >> .env
+            echo "USE_MOCK=${{ secrets.DEV_USE_MOCK }}" >> .env
+          fi
+
           # Weaviate Configs
           echo "WEAVIATE_HOST=${{ secrets.WEAVIATE_HOST }}" >> .env
           echo "WEAVIATE_PORT=${{ secrets.WEAVIATE_PORT }}" >> .env
