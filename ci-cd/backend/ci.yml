@@ -1,16 +1,18 @@
-# Backend
-
 name: Backend CI
 
 on:
+  workflow_dispatch: # 수동 실행
   pull_request:
     branches: [develop, main]
     types: [opened, synchronize, reopened]
-  workflow_dispatch:
+    paths-ignore:
+      - "**.md" # 문서 변경 무시
+      - ".github/**" # 워크플로우 변경 무시
+      - ".git*" # Git 설정 변경 무시
 
 permissions:
-  id-token: write # required to get OIDC token
-  contents: read # required to check out repository content
+  id-token: write # AWS OIDC 인증에 필요
+  contents: read # GitHub 저장소 접근 권한
 
 jobs:
   # ----------------------------
@@ -19,6 +21,10 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    outputs:
+      jar_name: ${{ steps.build.outputs.jar_name }}
+      jar_path: ${{ steps.build.outputs.jar_path }}
+      version: ${{ steps.build.outputs.version }}
 
     steps:
       - uses: actions/checkout@v4
@@ -34,13 +40,38 @@ jobs:
           cache: gradle
 
       - name: Build (no test)
-        run: ./gradlew build -x test
+        id: build
+        run: |
+          # 버전 추출
+          RAW_VERSION=$(./gradlew properties -q | grep "^version:" | awk '{print $2}')
 
-      - name: Upload jar (temporary for downstream job)
+          # 타겟 브랜치 결정 (PR: base_ref, 수동실행: ref_name)
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TARGET_BRANCH="${{ github.ref_name }}"
+          else
+            TARGET_BRANCH="${{ github.base_ref }}"
+          fi
+
+          # main 브랜치면 SNAPSHOT 제거
+          if [[ "$TARGET_BRANCH" == "main" ]]; then
+            VERSION=${RAW_VERSION%-SNAPSHOT}
+            ./gradlew build -x test -PreleaseVersion=$VERSION
+          else
+            VERSION=$RAW_VERSION
+            ./gradlew build -x test
+          fi
+
+          JAR_PATH=$(ls build/libs/*.jar | grep -v plain)
+          JAR_NAME=$(basename $JAR_PATH)
+          echo "jar_path=$JAR_PATH" >> $GITHUB_OUTPUT
+          echo "jar_name=$JAR_NAME" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Upload jar (temporary for S3)
         uses: actions/upload-artifact@v4
         with:
-          name: be-jar
-          path: build/libs/*.jar
+          name: ${{ steps.build.outputs.jar_name }}
+          path: ${{ steps.build.outputs.jar_path }}
           retention-days: 1
 
   # ----------------------------
@@ -65,13 +96,13 @@ jobs:
           cache: gradle
 
       - name: test (develop)
-        if: ${{ github.base_ref == 'develop' }}
+        if: github.base_ref == 'develop' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop')
         env:
           SPRING_PROFILES_ACTIVE: ${{ vars.SPRING_PROFILES_ACTIVE_TEST }}
-        run: ./gradlew test
+        run: ./gradlew test 
 
       - name: Integration test + JaCoCo (main)
-        if: ${{ github.base_ref == 'main' }}
+        if: github.base_ref == 'main' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
         env:
           COVERAGE_MIN: ${{ vars.COVERAGE_MIN }}
           SPRING_PROFILES_ACTIVE: ${{ vars.SPRING_PROFILES_ACTIVE_TEST }}
@@ -84,7 +115,7 @@ jobs:
     name: Static Analysis (Sonar Cloud)
     runs-on: ubuntu-latest
     needs: test
-    if: ${{ github.base_ref == 'develop' }}
+    if: github.base_ref == 'develop' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop')
 
     steps:
       - uses: actions/checkout@v4
@@ -95,7 +126,7 @@ jobs:
           distribution: "temurin"
           java-version: "21"
           cache: gradle
-
+      
       - name: Cache SonarQube packages
         uses: actions/cache@v4
         with:
@@ -109,47 +140,19 @@ jobs:
         run: ./gradlew build -x test sonar --info
 
   # ----------------------------
-  # 4. Artifacts (develop)
+  # 4. Main → S3 Release Archive
   # ----------------------------
-  artifacts:
-    name: Upload Verified Artifact (develop)
-    runs-on: ubuntu-latest
-    needs: [build, test, static_analysis]
-    if: ${{ github.base_ref == 'develop' }}
-
-    steps:
-      - name: Download built jar
-        uses: actions/download-artifact@v4
-        with:
-          name: be-jar
-          path: artifact
-
-      - name: Upload jar
-        uses: actions/upload-artifact@v4
-        with:
-          name: verified-be-jar
-          path: artifact/*.jar
-          retention-days: 90
-
-  # ----------------------------
-  # 5. Main → S3 Archive
-  # ----------------------------
-  main_archive:
+  release_archive:
     name: Archive release to S3
     runs-on: ubuntu-latest
-    needs: build
-    if: ${{ github.base_ref == 'main' }}
+    needs: [build, test]
+    if: github.base_ref == 'main' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
 
     steps:
-      - name: Set meta
-        id: meta
-        run: |
-          echo "timestamp=$(date -u +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
-
       - name: Download built jar
         uses: actions/download-artifact@v4
         with:
-          name: be-jar
+          name: ${{ needs.build.outputs.jar_name }}
           path: artifact
 
       - name: Configure AWS credentials
@@ -158,16 +161,77 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ap-northeast-2
 
-      - name: List artifact
-        run: ls -la artifact && find artifact -maxdepth 2 -type f
+      - name: Validate release version
+        run: |
+          VERSION="${{ needs.build.outputs.version }}"
+          if [[ "$VERSION" == *"SNAPSHOT"* ]]; then
+            echo "::error::SNAPSHOT version cannot be released: $VERSION"
+            exit 1
+          fi
+          echo "Release version validated: $VERSION"
 
-      - name: Upload jar to S3
+      - name: Upload release to S3
         env:
           BUCKET: ${{ secrets.RELEASE_BUCKET }}
           PREFIX: releases/backend
         run: |
+          # 버전 폴더에 저장 (버전당 하나)
           aws s3 cp artifact/ \
-            s3://$BUCKET/$PREFIX/${{ steps.meta.outputs.timestamp }} \
+            s3://$BUCKET/$PREFIX/${{ needs.build.outputs.version }}/ \
             --recursive \
+            --exclude "*" \
+            --include "*.jar"
+
+          # latest 폴더에 덮어쓰기 (최신 릴리즈, 기존 파일 삭제)
+          aws s3 sync artifact/ \
+            s3://$BUCKET/$PREFIX/latest/ \
+            --delete \
+            --exclude "*" \
+            --include "*.jar"
+
+  # ----------------------------
+  # 5. Develop → S3 Snapshot Archive
+  # ----------------------------
+  snapshot_archive:
+    name: Archive snapshot to S3
+    runs-on: ubuntu-latest
+    needs: [build, test, static_analysis]
+    if: github.base_ref == 'develop' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop')
+
+    steps:
+      - name: Set meta
+        id: meta
+        run: |
+          # KST (Asia/Seoul) 기준 타임스탬프 생성
+          echo "timestamp=$(TZ='Asia/Seoul' date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+
+      - name: Download built jar
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.jar_name }}
+          path: artifact
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ap-northeast-2
+
+      - name: Upload snapshot to S3
+        env:
+          BUCKET: ${{ secrets.RELEASE_BUCKET }}
+          PREFIX: snapshots/backend
+        run: |
+          # 타임스탬프 폴더에 저장 (빌드 히스토리)
+          aws s3 cp artifact/ \
+            s3://$BUCKET/$PREFIX/${{ needs.build.outputs.version }}/${{ steps.meta.outputs.timestamp }}/ \
+            --recursive \
+            --exclude "*" \
+            --include "*.jar"
+
+          # latest 폴더에 덮어쓰기 (최신 스냅샷, 기존 파일 삭제)
+          aws s3 sync artifact/ \
+            s3://$BUCKET/$PREFIX/latest/ \
+            --delete \
             --exclude "*" \
             --include "*.jar"

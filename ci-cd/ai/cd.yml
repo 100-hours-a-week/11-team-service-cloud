@@ -1,10 +1,13 @@
 name: FastAPI CD
 
 on:
-  workflow_run:
-    workflows: [ "FastAPI CI" ]
-    types: [ completed ]
-    branches: [ develop ]
+  workflow_dispatch: # 수동 실행
+  push:
+    branches: [develop, main]
+    paths-ignore:
+      - "**.md"
+      - ".github/**"
+      - ".git*"
 
 permissions:
   id-token: write
@@ -12,9 +15,13 @@ permissions:
   actions: read
 
 jobs:
-  deploy:
+  # ----------------------------
+  # 1. Develop -> Dev 서버 배포
+  # ----------------------------
+  deploy_dev:
+    name: Deploy to Dev Server
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: github.ref == 'refs/heads/develop' 
 
     steps:
       # ----------------------------
@@ -25,14 +32,22 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ap-northeast-2
-          
+
       # ----------------------------
-      # 2. S3에서 최신 artifact 다운로드
+      # 2. WireGuard VPN
+      # ----------------------------
+      - name: Setup WireGuard VPN
+        uses: niklaskeerl/easy-wireguard-action@v2
+        with:
+          WG_CONFIG_FILE: ${{ secrets.WG_CONFIG }}
+
+      # ----------------------------
+      # 3. S3에서 최신 snapshot 다운로드 
       # ----------------------------
       - name: Download artifact from S3
         env:
           BUCKET: ${{ secrets.RELEASE_BUCKET }}
-          PREFIX: releases/ai
+          PREFIX: snapshots/ai
         run: |
           rm -rf ./artifact
           mkdir -p ./artifact
@@ -43,8 +58,11 @@ jobs:
           echo "Downloaded from s3://$BUCKET/$PREFIX/latest/"
           ls -la ./artifact | head
 
+      - name: List artifact files
+        run: ls -la artifact && find artifact -maxdepth 2 -type f | head
+
       # ----------------------------
-      # 3. 서버로 배포 (백업/롤백 대비)
+      # 4. 서버 디렉토리 준비 + 백업
       # ----------------------------
       - name: Prepare server directories (backup)
         uses: appleboy/ssh-action@master
@@ -54,7 +72,7 @@ jobs:
           key: ${{ secrets.DEV_SSH_KEY }}
           script: |
             set -e
-            echo "=== FastAPI Deploy Start ==="
+            echo "=== FastAPI Deploy Start (DEV) ==="
 
             TARGET_DIR="/home/ubuntu/ai"
             BACKUP_DIR="/home/ubuntu/ai_backup"
@@ -72,9 +90,9 @@ jobs:
 
       - name: List AI files
         run: ls -la artifact && find artifact -maxdepth 2 -type f | head
-
+          
       # ----------------------------
-      # 4. artifact 업로드
+      # 5. artifact 업로드
       # ----------------------------
       - name: Upload artifact files
         uses: appleboy/scp-action@master
@@ -86,9 +104,9 @@ jobs:
           target: "/home/ubuntu/ai"
           strip_components: 1
 
-      # ----------------------------
-      # 5. FastAPI Restart + Health Check
-      # ----------------------------
+      # ----------------------------------
+      # 6. FastAPI Restart
+      # ----------------------------------
       - name: Restart FastAPI
         uses: appleboy/ssh-action@master
         with:
@@ -108,22 +126,18 @@ jobs:
             # 의존성 설치/업데이트
             uv sync
 
-            # 기존 프로세스 종료 (PID 파일 사용)
-            if [ -f uvicorn.pid ]; then
-              OLD_PID=$(cat uvicorn.pid)
-              if ps -p "$OLD_PID" >/dev/null 2>&1; then
-                kill "$OLD_PID" || true
-                sleep 3
-              fi
-              rm -f uvicorn.pid
-            fi
+            # 기존 프로세스 종료 
+            kill $(lsof -t -i :8000) || true
+            sleep 3
 
             # 새로 실행하고 PID 저장
             nohup uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 > ai.log 2>&1 &
-            echo $! > uvicorn.pid
-            echo "FastAPI restarted (PID: $(cat uvicorn.pid))"
+            echo "FastAPI restarted (PID: $!)"
 
-      - name: Health check
+      # ----------------------------
+      # 7. Health Check
+      # ----------------------------
+      - name: Health Check
         id: health_check
         uses: appleboy/ssh-action@master
         continue-on-error: true
@@ -149,7 +163,7 @@ jobs:
             exit 1
 
       # ----------------------------
-      # 6. Rollback
+      # 8. Rollback
       # ----------------------------
       - name: Rollback on failure
         if: steps.health_check.outcome == 'failure'
@@ -164,14 +178,8 @@ jobs:
             BACKUP_DIR="/home/ubuntu/ai_backup"
 
             # 현재 프로세스 종료
-            if [ -f "$TARGET_DIR/uvicorn.pid" ]; then
-              OLD_PID=$(cat "$TARGET_DIR/uvicorn.pid")
-              if ps -p "$OLD_PID" >/dev/null 2>&1; then
-                kill "$OLD_PID" || true
-                sleep 3
-              fi
-              rm -f "$TARGET_DIR/uvicorn.pid"
-            fi
+            kill $(lsof -t -i :8000) || true
+            sleep 3
 
             # 백업 복구
             if [ -d "$BACKUP_DIR" ]; then
@@ -194,26 +202,235 @@ jobs:
             uv sync
 
             nohup uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 > ai.log 2>&1 &
-            echo $! > uvicorn.pid
-            echo "FastAPI restarted after rollback (PID: $(cat uvicorn.pid))"
+            echo "FastAPI restarted after rollback (PID: $!)"
 
       # ----------------------------
-      # 7. Discord 알림
+      # 9. Discord 알림
       # ----------------------------
       - name: Notify Discord - Success
-        if: success()
+        if: steps.health_check.outcome == 'success'
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
           status: success
-          title: "🚀 AI 배포 성공"
+          title: "🚀 [DEV] AI 배포 성공"
           description: "S3 latest 기반 배포 완료"
 
       - name: Notify Discord - Failure
-        if: failure()
+        if: steps.health_check.outcome == 'failure'
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
           status: failure
-          title: "🚨 AI 배포 실패"
+          title: "🚨 [DEV] AI 배포 실패"
           description: "Health check 실패 또는 배포 중 오류 발생"
+
+      - name: Fail workflow if health check failed
+        if: steps.health_check.outcome == 'failure'
+        run: exit 1
+
+
+  # ----------------------------
+  # 2. Main -> Prod 서버 배포
+  # ----------------------------
+  deploy_prod:
+    name: Deploy to Prod Server
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      # ----------------------------
+      # 1. AWS 인증
+      # ----------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ap-northeast-2
+
+      # ----------------------------
+      # 2. WireGuard VPN
+      # ----------------------------
+      - name: Setup WireGuard VPN
+        uses: niklaskeerl/easy-wireguard-action@v2
+        with:
+          WG_CONFIG_FILE: ${{ secrets.WG_CONFIG }}
+
+      # ----------------------------
+      # 3. S3에서 최신 artifact 다운로드 (latest)
+      # ----------------------------
+      - name: Download artifact from S3
+        env:
+          BUCKET: ${{ secrets.RELEASE_BUCKET }}
+          PREFIX: releases/ai
+        run: |
+          rm -rf ./artifact
+          mkdir -p ./artifact
+
+          aws s3 cp "s3://$BUCKET/$PREFIX/latest/" ./artifact/ --recursive
+
+          echo "Downloaded from s3://$BUCKET/$PREFIX/latest/"
+          ls -la ./artifact | head
+
+      - name: List artifact files
+        run: ls -la artifact && find artifact -maxdepth 2 -type f | head
+
+      # ----------------------------
+      # 4. 서버 디렉토리 준비 + 백업
+      # ----------------------------
+      - name: Prepare server directories (backup)
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            set -e
+            echo "=== FastAPI Deploy Start (PROD) ==="
+
+            TARGET_DIR="/home/ubuntu/ai"
+            BACKUP_DIR="/home/ubuntu/ai_backup"
+
+            rm -rf "$BACKUP_DIR"
+            if [ -d "$TARGET_DIR" ]; then
+              cp -r "$TARGET_DIR" "$BACKUP_DIR"
+              echo "Backup completed"
+            fi
+
+            rm -rf "$TARGET_DIR"
+            mkdir -p "$TARGET_DIR"
+
+      # ----------------------------
+      # 5. artifact 업로드
+      # ----------------------------
+      - name: Upload artifact files
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          source: "artifact/**"
+          target: "/home/ubuntu/ai"
+          strip_components: 1
+
+      # ----------------------------------
+      # 6. FastAPI Restart 
+      # ----------------------------------
+      - name: Restart FastAPI
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /home/ubuntu/ai
+
+            if ! command -v uv >/dev/null 2>&1; then
+              curl -LsSf https://astral.sh/uv/install.sh | sh
+              export PATH="$HOME/.local/bin:$PATH"
+            fi
+
+            uv sync
+
+            # 기존 프로세스 종료
+            kill $(lsof -t -i :8000) || true
+            sleep 3
+
+            # 새로 실행
+            nohup uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 > ai.log 2>&1 &
+            echo "FastAPI restarted (PID: $!)"
+
+      # ----------------------------
+      # 7. Health Check
+      # ----------------------------
+      - name: Health Check
+        id: health_check
+        uses: appleboy/ssh-action@master
+        continue-on-error: true
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            echo "Health Check 시작 (10초 대기)..."
+            sleep 10
+
+            for i in 1 2 3; do
+              echo "Health Check 시도 $i/3"
+              if curl -sf http://localhost:8000 > /dev/null; then
+                echo "Health Check 성공"
+                exit 0
+              fi
+              sleep 10
+            done
+
+            echo "Health Check 실패"
+            exit 1
+
+      # ----------------------------
+      # 8. Rollback
+      # ----------------------------
+      - name: Rollback on failure
+        if: steps.health_check.outcome == 'failure'
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            set -e
+            TARGET_DIR="/home/ubuntu/ai"
+            BACKUP_DIR="/home/ubuntu/ai_backup"
+
+            # 현재 프로세스 종료
+            kill $(lsof -t -i :8000) || true
+            sleep 3
+
+            # 백업 복구
+            if [ -d "$BACKUP_DIR" ]; then
+              rm -rf "$TARGET_DIR"
+              mv "$BACKUP_DIR" "$TARGET_DIR"
+              echo "Rollback completed"
+            else
+              echo "Rollback failed: no backup"
+              exit 1
+            fi
+
+            # 롤백 후 재시작
+            cd "$TARGET_DIR"
+
+            if ! command -v uv >/dev/null 2>&1; then
+              curl -LsSf https://astral.sh/uv/install.sh | sh
+              export PATH="$HOME/.local/bin:$PATH"
+            fi
+
+            uv sync
+
+            nohup uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 > ai.log 2>&1 &
+            echo "FastAPI restarted after rollback (PID: $!)"
+
+      # ----------------------------
+      # 9. Discord 알림
+      # ----------------------------
+      - name: Notify Discord - Success
+        if: steps.health_check.outcome == 'success'
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: success
+          title: "🚀 [PROD] AI 배포 성공"
+          description: "S3 latest 기반 배포 완료"
+
+      - name: Notify Discord - Failure
+        if: steps.health_check.outcome == 'failure'
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: failure
+          title: "🚨 [PROD] AI 배포 실패"
+          description: "Health check 실패 또는 배포 중 오류 발생"
+
+      - name: Fail workflow if health check failed
+        if: steps.health_check.outcome == 'failure'
+        run: exit 1

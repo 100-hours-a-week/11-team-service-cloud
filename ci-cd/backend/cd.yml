@@ -1,11 +1,13 @@
 name: Backend CD
 
 on:
-  workflow_run:
-    workflows: ["Backend CI"]
-    types: [completed]
-    branches: [develop]
   workflow_dispatch: # 수동 실행
+  push:
+    branches: [develop, main]
+    paths-ignore:
+      - "**.md"
+      - ".github/**"
+      - ".git*"
 
 permissions:
   id-token: write # AWS OIDC 인증에 필요
@@ -13,52 +15,69 @@ permissions:
   actions: read
 
 jobs:
-  deploy:
+  # ----------------------------
+  # 1. Develop → Dev 서버 배포
+  # ----------------------------
+  deploy_dev:
+    name: Deploy to Dev Server
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: github.ref == 'refs/heads/develop' || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main')
 
     steps:
-      - name: Get timestamp (UTC)
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ap-northeast-2
+
+      - name: Setup WireGuard VPN
+        uses: egor-tensin/setup-wireguard@v1
+        with:
+          endpoint: ${{ secrets.WG_ENDPOINT }}
+          endpoint_public_key: ${{ secrets.WG_SERVER_PUBLIC_KEY }}
+          ips: ${{ secrets.WG_CLIENT_IP }}
+          allowed_ips: ${{ secrets.WG_ALLOWED_IPS }}
+          private_key: ${{ secrets.WG_PRIVATE_KEY }}
+          keepalive: 25
+
+      - name: Get timestamp (KST)
         id: timestamp
-        run: echo "timestamp=$(date -u +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+        run: echo "timestamp=$(TZ='Asia/Seoul' date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
 
       - name: Deploy from S3 and Execute
         uses: appleboy/ssh-action@master
         env:
           RELEASE_BUCKET: ${{ secrets.RELEASE_BUCKET }}
           TIMESTAMP: ${{ steps.timestamp.outputs.timestamp }}
-          DB_PORT: ${{ secrets.DB_PORT }}
-          DB_SCHEMA: ${{ secrets.DB_SCHEMA }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DOT_ENV: ${{ secrets.DOT_ENV_DEV }}
         with:
           host: ${{ secrets.DEV_HOST }}
           username: ${{ secrets.DEV_USER }}
           key: ${{ secrets.DEV_SSH_KEY }}
-          envs: RELEASE_BUCKET,TIMESTAMP,DB_PORT,DB_SCHEMA,DB_USER,DB_PASSWORD
+          envs: RELEASE_BUCKET,TIMESTAMP,DOT_ENV
           script: |
             cd /home/ubuntu/backend
 
-            # S3에서 최신 버전 찾기
-            LATEST_VERSION=$(aws s3 ls s3://$RELEASE_BUCKET/releases/backend/ | sort | tail -1 | awk '{print $2}' | tr -d '/')
-            echo "최신 버전: $LATEST_VERSION"
+            # .env 파일 생성
+            echo "$DOT_ENV" > .env
+            chmod 600 .env
 
-            # S3에서 jar 다운로드 (plain.jar 제외)
+            # S3 snapshots에서 최신 jar 다운로드
             NEW_JAR="app-$TIMESTAMP.jar"
-            aws s3 cp s3://$RELEASE_BUCKET/releases/backend/$LATEST_VERSION/ ./ --recursive --exclude "*" --include "*.jar" --exclude "*-plain.jar"
+            aws s3 cp s3://$RELEASE_BUCKET/snapshots/backend/latest/ ./ --recursive --exclude "*" --include "*.jar" --exclude "*-plain.jar"
 
-            # 다운로드한 jar 파일 이름 변경 (plain 제외)
+            # 다운로드한 jar 파일 이름 변경
             DOWNLOADED_JAR=$(ls -t *.jar 2>/dev/null | grep -v "^app-" | grep -v "plain" | head -n 1)
             if [ -n "$DOWNLOADED_JAR" ]; then
               mv "$DOWNLOADED_JAR" "$NEW_JAR"
               echo "Renamed $DOWNLOADED_JAR to $NEW_JAR"
             fi
 
-            # 이전 버전 백업 (롤백용) - 새 jar 제외
+            # 이전 버전 백업 (롤백용)
             PREVIOUS_JAR=$(ls -t app-*.jar 2>/dev/null | grep -v "^$NEW_JAR$" | head -n 1)
             echo "PREVIOUS_JAR=$PREVIOUS_JAR" > .deploy_info
 
-            # 기존 프로세스 종료 (PID 파일 사용)
+            # 기존 프로세스 종료
             if [ -f backend.pid ]; then
               OLD_PID=$(cat backend.pid)
               if ps -p $OLD_PID > /dev/null 2>&1; then
@@ -69,11 +88,11 @@ jobs:
               rm -f backend.pid
             fi
 
-            # 새 버전 실행
-            DB_PORT=$DB_PORT DB_SCHEMA=$DB_SCHEMA DB_USER=$DB_USER DB_PASSWORD=$DB_PASSWORD \
-              nohup java -jar "$NEW_JAR" > backend.log 2>&1 &
+            # .env 환경변수 로드 후 실행 (dev 프로필)
+            set -a; source .env; set +a
+            nohup java -Dspring.profiles.active=dev -jar "$NEW_JAR" > backend.log 2>&1 &
             echo $! > backend.pid
-            echo "새 버전 실행: $NEW_JAR (PID: $(cat backend.pid))"
+            echo "새 버전 실행: $NEW_JAR (PID: $(cat backend.pid), Profile: dev)"
 
       - name: Health Check
         id: health_check
@@ -87,7 +106,6 @@ jobs:
             echo "Health Check 시작 (30초 대기)..."
             sleep 30
 
-            # 3회 재시도 (10초 간격)
             for i in 1 2 3; do
               echo "Health Check 시도 $i/3"
               if curl -sf http://localhost:8080/api/health > /dev/null; then
@@ -103,20 +121,13 @@ jobs:
       - name: Rollback on failure
         if: steps.health_check.outcome == 'failure'
         uses: appleboy/ssh-action@master
-        env:
-          DB_PORT: ${{ secrets.DB_PORT }}
-          DB_SCHEMA: ${{ secrets.DB_SCHEMA }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         with:
           host: ${{ secrets.DEV_HOST }}
           username: ${{ secrets.DEV_USER }}
           key: ${{ secrets.DEV_SSH_KEY }}
-          envs: DB_PORT,DB_SCHEMA,DB_USER,DB_PASSWORD
           script: |
             cd /home/ubuntu/backend
 
-            # 현재 프로세스 종료 (PID 파일 사용)
             if [ -f backend.pid ]; then
               OLD_PID=$(cat backend.pid)
               if ps -p $OLD_PID > /dev/null 2>&1; then
@@ -126,13 +137,12 @@ jobs:
               rm -f backend.pid
             fi
 
-            # 이전 버전으로 롤백
             source .deploy_info
             if [ -n "$PREVIOUS_JAR" ] && [ -f "$PREVIOUS_JAR" ]; then
-              DB_PORT=$DB_PORT DB_SCHEMA=$DB_SCHEMA DB_USER=$DB_USER DB_PASSWORD=$DB_PASSWORD \
-                nohup java -jar "$PREVIOUS_JAR" > backend.log 2>&1 &
+              set -a; source .env; set +a
+              nohup java -Dspring.profiles.active=dev -jar "$PREVIOUS_JAR" > backend.log 2>&1 &
               echo $! > backend.pid
-              echo "롤백 완료: $PREVIOUS_JAR (PID: $(cat backend.pid))"
+              echo "롤백 완료: $PREVIOUS_JAR (PID: $(cat backend.pid), Profile: dev)"
             else
               echo "롤백 실패: 이전 버전 없음"
               exit 1
@@ -144,7 +154,7 @@ jobs:
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
           status: success
-          title: "🚀 백엔드 배포 성공"
+          title: "🚀 [DEV] 백엔드 배포 성공"
           description: "app-${{ steps.timestamp.outputs.timestamp }}.jar"
 
       - name: Notify Discord - Failure
@@ -153,7 +163,167 @@ jobs:
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
           status: failure
-          title: "🚨 백엔드 배포 실패"
+          title: "🚨 [DEV] 백엔드 배포 실패"
+          description: "app-${{ steps.timestamp.outputs.timestamp }}.jar 배포 실패"
+
+      - name: Fail workflow if health check failed
+        if: steps.health_check.outcome == 'failure'
+        run: exit 1
+
+
+  # ----------------------------
+  # 2. Main → Prod 서버 배포
+  # ----------------------------
+  deploy_prod:
+    name: Deploy to Prod Server
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ap-northeast-2
+
+      - name: Setup WireGuard VPN
+        uses: egor-tensin/setup-wireguard@v1
+        with:
+          endpoint: ${{ secrets.WG_ENDPOINT }}
+          endpoint_public_key: ${{ secrets.WG_SERVER_PUBLIC_KEY }}
+          ips: ${{ secrets.WG_CLIENT_IP }}
+          allowed_ips: ${{ secrets.WG_ALLOWED_IPS }}
+          private_key: ${{ secrets.WG_PRIVATE_KEY }}
+          keepalive: 25
+
+      - name: Get timestamp (KST)
+        id: timestamp
+        run: echo "timestamp=$(TZ='Asia/Seoul' date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+
+      - name: Deploy from S3 and Execute
+        uses: appleboy/ssh-action@master
+        env:
+          RELEASE_BUCKET: ${{ secrets.RELEASE_BUCKET }}
+          TIMESTAMP: ${{ steps.timestamp.outputs.timestamp }}
+          DOT_ENV: ${{ secrets.DOT_ENV }}
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          envs: RELEASE_BUCKET,TIMESTAMP,DOT_ENV
+          script: |
+            cd /home/ubuntu/backend
+
+            # .env 파일 생성
+            echo "$DOT_ENV" > .env
+            chmod 600 .env
+
+            # S3 releases에서 최신 버전 찾기
+            LATEST_VERSION=$(aws s3 ls s3://$RELEASE_BUCKET/releases/backend/ | sort | tail -1 | awk '{print $2}' | tr -d '/')
+            echo "최신 버전: $LATEST_VERSION"
+
+            # S3에서 jar 다운로드
+            NEW_JAR="app-$TIMESTAMP.jar"
+            aws s3 cp s3://$RELEASE_BUCKET/releases/backend/$LATEST_VERSION/ ./ --recursive --exclude "*" --include "*.jar" --exclude "*-plain.jar"
+
+            # 다운로드한 jar 파일 이름 변경
+            DOWNLOADED_JAR=$(ls -t *.jar 2>/dev/null | grep -v "^app-" | grep -v "plain" | head -n 1)
+            if [ -n "$DOWNLOADED_JAR" ]; then
+              mv "$DOWNLOADED_JAR" "$NEW_JAR"
+              echo "Renamed $DOWNLOADED_JAR to $NEW_JAR"
+            fi
+
+            # 이전 버전 백업 (롤백용)
+            PREVIOUS_JAR=$(ls -t app-*.jar 2>/dev/null | grep -v "^$NEW_JAR$" | head -n 1)
+            echo "PREVIOUS_JAR=$PREVIOUS_JAR" > .deploy_info
+
+            # 기존 프로세스 종료
+            if [ -f backend.pid ]; then
+              OLD_PID=$(cat backend.pid)
+              if ps -p $OLD_PID > /dev/null 2>&1; then
+                kill $OLD_PID || true
+                echo "기존 프로세스 종료: PID $OLD_PID"
+                sleep 3
+              fi
+              rm -f backend.pid
+            fi
+
+            # .env 환경변수 로드 후 실행 (prod 프로필)
+            set -a; source .env; set +a
+            nohup java -Dspring.profiles.active=prod -jar "$NEW_JAR" > backend.log 2>&1 &
+            echo $! > backend.pid
+            echo "새 버전 실행: $NEW_JAR (PID: $(cat backend.pid), Profile: prod)"
+
+      - name: Health Check
+        id: health_check
+        uses: appleboy/ssh-action@master
+        continue-on-error: true
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            echo "Health Check 시작 (30초 대기)..."
+            sleep 30
+
+            for i in 1 2 3; do
+              echo "Health Check 시도 $i/3"
+              if curl -sf http://localhost:8080/api/health > /dev/null; then
+                echo "Health Check 성공"
+                exit 0
+              fi
+              sleep 10
+            done
+
+            echo "Health Check 실패"
+            exit 1
+
+      - name: Rollback on failure
+        if: steps.health_check.outcome == 'failure'
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/backend
+
+            if [ -f backend.pid ]; then
+              OLD_PID=$(cat backend.pid)
+              if ps -p $OLD_PID > /dev/null 2>&1; then
+                kill $OLD_PID || true
+                sleep 3
+              fi
+              rm -f backend.pid
+            fi
+
+            source .deploy_info
+            if [ -n "$PREVIOUS_JAR" ] && [ -f "$PREVIOUS_JAR" ]; then
+              set -a; source .env; set +a
+              nohup java -Dspring.profiles.active=prod -jar "$PREVIOUS_JAR" > backend.log 2>&1 &
+              echo $! > backend.pid
+              echo "롤백 완료: $PREVIOUS_JAR (PID: $(cat backend.pid), Profile: prod)"
+            else
+              echo "롤백 실패: 이전 버전 없음"
+              exit 1
+            fi
+
+      - name: Notify Discord - Success
+        if: steps.health_check.outcome == 'success'
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: success
+          title: "🚀 [PROD] 백엔드 배포 성공"
+          description: "app-${{ steps.timestamp.outputs.timestamp }}.jar"
+
+      - name: Notify Discord - Failure
+        if: steps.health_check.outcome == 'failure'
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: failure
+          title: "🚨 [PROD] 백엔드 배포 실패"
           description: "app-${{ steps.timestamp.outputs.timestamp }}.jar 배포 실패"
 
       - name: Fail workflow if health check failed

@@ -1,10 +1,13 @@
 name: Frontend CD
 
 on:
-  workflow_run:
-    workflows: ["Frontend CI"]
-    types: [completed]
-    branches: [develop]
+  workflow_dispatch: # 수동 실행
+  push:
+    branches: [develop, main]
+    paths-ignore:
+      - "**.md"
+      - ".github/**"
+      - ".git*"
 
 permissions:
   id-token: write
@@ -12,9 +15,13 @@ permissions:
   actions: read
 
 jobs:
-  deploy:
+  # ----------------------------
+  # 1. Develop -> Dev 서버 배포
+  # ----------------------------
+  deploy_dev:
+    name: Deploy Frontend to Dev Server
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: github.ref == 'refs/heads/develop'
 
     steps:
       # ----------------------------
@@ -32,25 +39,25 @@ jobs:
       - name: Download artifact from S3
         env:
           BUCKET: ${{ secrets.RELEASE_BUCKET }}
-          PREFIX: releases/frontend
+          PREFIX: snapshots/frontend
         run: |
           rm -rf ./dist
           mkdir -p ./dist
 
-          # latest 폴더에서 dist 동기화
           aws s3 cp "s3://$BUCKET/$PREFIX/latest/" ./dist/ --recursive
 
           echo "Downloaded from s3://$BUCKET/$PREFIX/latest/"
           ls -la ./dist | head
 
-      - name: Prepare release name
-        id: meta
-        run: echo "release=$(TZ='Asia/Seoul' date -u +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
-      
+      - name: Setup WireGuard
+        uses: niklaskeerl/easy-wireguard-action@v2
+        with:
+          WG_CONFIG_FILE: ${{ secrets.WG_CONFIG }}
+
       # ----------------------------
-      # 3. 서버로 배포
+      # 3. 서버에서 기존 파일 백업/정리
       # ----------------------------
-      - name: Deploy dist to server
+      - name: Prepare target directory (backup)
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.DEV_HOST }}
@@ -58,21 +65,24 @@ jobs:
           key: ${{ secrets.DEV_SSH_KEY }}
           script: |
             set -e
-            echo "=== Frontend Deploy Start ==="
+            echo "=== Frontend Deploy Start (DEV) ==="
 
-            TARGET_DIR="/home/ubuntu/frontend"
-            BACKUP_DIR="/home/ubuntu/frontend_backup"
+            TARGET_DIR="/var/www/frontend"
+            BACKUP_DIR="/var/www/frontend_backup"
 
             # 백업 (롤백 대비)
-            rm -rf $BACKUP_DIR
+            sudo rm -rf $BACKUP_DIR
             if [ -d "$TARGET_DIR" ]; then
-              cp -r $TARGET_DIR $BACKUP_DIR
+              sudo cp -r $TARGET_DIR $BACKUP_DIR
               echo "Backup completed"
             fi
 
             # 기존 파일 제거
-            rm -rf $TARGET_DIR
-            mkdir -p $TARGET_DIR
+            sudo rm -rf $TARGET_DIR
+            sudo mkdir -p $TARGET_DIR
+
+            sudo chown -R ubuntu:ubuntu $TARGET_DIR
+            sudo chmod -R 755 $TARGET_DIR
 
       # ----------------------------
       # 4. dist 업로드
@@ -84,9 +94,9 @@ jobs:
           username: ${{ secrets.DEV_USER }}
           key: ${{ secrets.DEV_SSH_KEY }}
           source: "dist/**"
-          target: "/home/ubuntu/frontend"
+          target: "/var/www/frontend"
           strip_components: 1
-      
+
       # ----------------------------
       # 5. Nginx Reload
       # ----------------------------
@@ -135,36 +145,207 @@ jobs:
           username: ${{ secrets.DEV_USER }}
           key: ${{ secrets.DEV_SSH_KEY }}
           script: |
-            TARGET_DIR="/home/ubuntu/frontend"
-            BACKUP_DIR="/home/ubuntu/frontend_backup"
+            TARGET_DIR="/var/www/frontend"
+            BACKUP_DIR="/var/www/frontend_backup"
 
             if [ -d "$BACKUP_DIR" ]; then
-              rm -rf $TARGET_DIR
-              mv $BACKUP_DIR $TARGET_DIR
+              sudo rm -rf $TARGET_DIR
+              sudo mv $BACKUP_DIR $TARGET_DIR
               sudo systemctl reload nginx
               echo "Rollback completed"
             else
               echo "Rollback failed: no backup"
               exit 1
             fi
-      
+
       # ----------------------------
       # 8. Discord 알림
       # ----------------------------
       - name: Notify Discord - Success
-        if: success()
+        if: steps.health_check.outcome == 'success'
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
           status: success
-          title: "🚀 프론트엔드 배포 성공"
-          description: "Frontend dist 배포 완료"
+          title: "🚀 [DEV] 프론트엔드 배포 성공"
+          description: "dist 배포 완료"
 
       - name: Notify Discord - Failure
-        if: failure()
+        if: steps.health_check.outcome == 'failure'
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
           status: failure
-          title: "🚨 프론트엔드 배포 실패"
-          description: "Frontend dist 배포 중 오류 발생"
+          title: "🚨 [DEV] 프론트엔드 배포 실패"
+          description: "dist 배포 실패"
+
+      - name: Fail workflow if health check failed
+        if: steps.health_check.outcome == 'failure'
+        run: exit 1
+
+
+  # ----------------------------
+  # 2. Main -> Prod 서버 배포
+  # ----------------------------
+  deploy_prod:
+    name: Deploy Frontend to Prod Server
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      # ----------------------------
+      # 1. AWS 인증
+      # ----------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ap-northeast-2
+
+      # ----------------------------
+      # 2. S3에서 최신 dist 다운로드
+      # ----------------------------
+      - name: Download artifact from S3
+        env:
+          BUCKET: ${{ secrets.RELEASE_BUCKET }}
+          PREFIX: releases/frontend
+        run: |
+          rm -rf ./dist
+          mkdir -p ./dist
+
+          aws s3 cp "s3://$BUCKET/$PREFIX/latest/" ./dist/ --recursive
+
+          echo "Downloaded from s3://$BUCKET/$PREFIX/latest/"
+          ls -la ./dist | head
+
+      - name: Setup WireGuard
+        uses: niklaskeerl/easy-wireguard-action@v2
+        with:
+          WG_CONFIG_FILE: ${{ secrets.WG_CONFIG }}
+
+      # ----------------------------
+      # 3. 서버에서 기존 파일 백업/정리
+      # ----------------------------
+      - name: Prepare target directory (backup)
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            set -e
+            echo "=== Frontend Deploy Start (PROD) ==="
+
+            TARGET_DIR="/var/www/frontend"
+            BACKUP_DIR="/var/www/frontend_backup"
+
+            sudo rm -rf $BACKUP_DIR
+            if [ -d "$TARGET_DIR" ]; then
+              sudo cp -r $TARGET_DIR $BACKUP_DIR
+              echo "Backup completed"
+            fi
+
+            sudo rm -rf $TARGET_DIR
+            sudo mkdir -p $TARGET_DIR
+
+            sudo chown -R ubuntu:ubuntu $TARGET_DIR
+            sudo chmod -R 755 $TARGET_DIR
+
+      # ----------------------------
+      # 4. dist 업로드
+      # ----------------------------
+      - name: Upload dist files
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          source: "dist/**"
+          target: "/var/www/frontend"
+          strip_components: 1
+
+      # ----------------------------
+      # 5. Nginx Reload
+      # ----------------------------
+      - name: Reload nginx
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            sudo nginx -t
+            sudo systemctl reload nginx
+            echo "Nginx reloaded"
+
+      # ----------------------------
+      # 6. Health Check
+      # ----------------------------
+      - name: Health check
+        id: health_check
+        uses: appleboy/ssh-action@master
+        continue-on-error: true
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            echo "Waiting for frontend to be available..."
+            sleep 10
+
+            if curl -sf http://localhost > /dev/null; then
+              echo "Health check success"
+              exit 0
+            fi
+
+            echo "Health check failed"
+            exit 1
+
+      # ----------------------------
+      # 7. Rollback
+      # ----------------------------
+      - name: Rollback on failure
+        if: steps.health_check.outcome == 'failure'
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            TARGET_DIR="/var/www/frontend"
+            BACKUP_DIR="/var/www/frontend_backup"
+
+            if [ -d "$BACKUP_DIR" ]; then
+              sudo rm -rf $TARGET_DIR
+              sudo mv $BACKUP_DIR $TARGET_DIR
+              sudo systemctl reload nginx
+              echo "Rollback completed"
+            else
+              echo "Rollback failed: no backup"
+              exit 1
+            fi
+
+      # ----------------------------
+      # 8. Discord 알림
+      # ----------------------------
+      - name: Notify Discord - Success
+        if: steps.health_check.outcome == 'success'
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: success
+          title: "🚀 [PROD] 프론트엔드 배포 성공"
+          description: "dist 배포 완료"
+
+      - name: Notify Discord - Failure
+        if: steps.health_check.outcome == 'failure'
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: failure
+          title: "🚨 [PROD] 프론트엔드 배포 실패"
+          description: "dist 배포 실패"
+
+      - name: Fail workflow if health check failed
+        if: steps.health_check.outcome == 'failure'
+        run: exit 1

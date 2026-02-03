@@ -13,7 +13,7 @@ if command -v uv &> /dev/null; then
   echo "=== uv 이미 설치됨 (스킵) ==="
 else
   echo "=== uv 설치 ==="
-  curl -LsSf https://astral.sh/uv/install.sh | sh
+  curl -LSf https://astral.sh/uv/install.sh | sh
 fi
 
 export PATH="$HOME/.local/bin:$PATH"
