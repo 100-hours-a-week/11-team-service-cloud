@@ -1,7 +1,7 @@
 import { sleep } from 'k6';
 
 import { vus, duration, thinkTimeMs } from './lib/config.js';
-import { getTokenOrRefresh } from './lib/auth.js';
+import { getTokenOrRefresh, pickTokenForVu } from './lib/auth.js';
 import { analyzeAndConfirm } from './scenarios/job_posting_analyze.js';
 
 export const options = {
@@ -18,6 +18,7 @@ export function setup() {
 }
 
 export default function (data) {
-  analyzeAndConfirm(data.accessToken);
+  const token = pickTokenForVu(data);
+  analyzeAndConfirm(token);
   sleep(thinkTimeMs() / 1000);
 }
