@@ -60,13 +60,20 @@ export function applyAndEvaluate(accessToken, jobMasterId, resumeBytes, portfoli
       tags: { name: 'applications.get-analysis' },
     });
 
-    if (res.status === 200) {
-      const body = res.json();
-      check(body, {
-        'analysis has overallScore': (b) => b?.data?.overallScore !== undefined,
-      });
-      break;
-    }
+    if (res.status === 200) {                                                    
+      const body = res.json();                                                        
+      const overall = body?.data?.overallScore;                                                                          
+                                                                                                                            
+      const hasScore = overall !== undefined && overall !== null;                                                            
+                                                                                                                            
+      check(body, {                                                                                                          
+        'analysis has overallScore': () => hasScore,                                                                         
+      });                                                                                                                    
+                                                                                                                            
+      if (hasScore) {                                                                                                        
+        break;                                                                                            
+      }                                                    
+    } 
 
     sleep(intervalMs / 1000);
   }
