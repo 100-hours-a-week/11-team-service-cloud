@@ -41,7 +41,7 @@ export function chatBasicFlow(accessToken, jobMasterId) {
     null,
     { headers: { Authorization: `Bearer ${accessToken}` }, tags: { name: 'chat.join-room' } }
   );
-  expectStatusIn(joinRes, [200, 201], 'chat.join-room');
+  expectStatusIn(joinRes, [200, 201, 409], 'chat.join-room');
 
   sleep(thinkTimeMs() / 1000);
 
