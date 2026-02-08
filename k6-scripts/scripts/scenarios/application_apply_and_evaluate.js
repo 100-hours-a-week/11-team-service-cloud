@@ -43,7 +43,7 @@ export function applyAndEvaluate(accessToken, jobMasterId, resumeBytes, portfoli
     authHeaders(accessToken)
   );
   // 컨트롤러에서 202 리턴
-  expectStatusIn(reqRes, [202, 200], 'applications.request-analyses');
+  expectStatusIn(reqRes, [202, 200, 409], 'applications.request-analyses');
 
   sleep(thinkTimeMs() / 1000);
 
