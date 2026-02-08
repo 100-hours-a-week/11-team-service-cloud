@@ -52,12 +52,12 @@ echo "[k6] output:   $OUT_JSON"
 
 DASHBOARD_OUT=""
 if [[ "$NO_DASHBOARD" != "--no-dashboard" ]]; then
-  DASHBOARD_OUT="--out dashboard"
+  DASHBOARD_OUT="--out web-dashboard"
 fi
 
 # VAR=value command args...: commmand에 VAR 환경변수를 설정하여 실행
 TARGET_BASE_URL="$BASE_URL" k6 run \
   --out "json=$OUT_JSON" \
-  --out "prometheus-rw" \
+  --out "experimental-prometheus-rw" \
   $DASHBOARD_OUT \
   "$K6_SCRIPT"
