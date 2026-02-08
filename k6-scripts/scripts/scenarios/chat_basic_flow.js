@@ -38,7 +38,7 @@ export function chatBasicFlow(accessToken, jobMasterId) {
   // 2) 채팅방 입장
   const joinRes = http.post(
     `${baseUrl}/api/v1/chat-rooms/${chatRoomId}/members`,
-    null,
+    '',
     { headers: { Authorization: `Bearer ${accessToken}` }, tags: { name: 'chat.join-room' } }
   );
   expectStatusIn(joinRes, [200, 201, 409], 'chat.join-room');
