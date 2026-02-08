@@ -49,8 +49,8 @@ export function applyAndEvaluate(accessToken, jobMasterId, resumeBytes, portfoli
 
   // 3) 결과 polling (AI worker가 stub로 매우 빠르게 끝난다는 가정)
   // 아직 준비가 안 됐으면 202/500 등 다양할 수 있어서, 짧게만 시도
-  const maxAttempts = parseInt(__ENV.EVAL_POLL_ATTEMPTS || '5', 10);
-  const intervalMs = parseInt(__ENV.EVAL_POLL_INTERVAL_MS || '500', 10);
+  const maxAttempts = parseInt(__ENV.EVAL_POLL_ATTEMPTS || '30', 10);
+  const intervalMs = parseInt(__ENV.EVAL_POLL_INTERVAL_MS || '1000', 10);
 
   for (let i = 0; i < maxAttempts; i++) {
     const res = http.get(`${baseUrl}/api/v1/applications/${applicationId}/analyses`, {
