@@ -28,10 +28,18 @@ export function chatBasicFlow(accessToken, jobMasterId) {
   expectStatusIn(createRes, [201, 200], 'chat.create-room');
 
   const createBody = createRes.json();
-  const chatRoomId = createBody?.data;
-  check(createBody, {
-    'create-room has roomId': (b) => !!b?.data,
-  });
+  // API 응답의 data가 number일 수도, object일 수도 있어서 방어적으로 추출   
+  const data = createBody?.data;                                             
+  const chatRoomId =                                                         
+    (typeof data === 'number' || typeof data === 'string')                   
+      ? data                                                                 
+      : (data?.chatRoomId ?? data?.id ?? data?.roomId ?? null);              
+
+  check(createBody, {                                                        
+    'create-room has roomId': () => !!chatRoomId,                            
+  });                                                                        
+
+  if (!chatRoomId) return null;                                       
 
   sleep(thinkTimeMs() / 1000);
 
