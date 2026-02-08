@@ -33,7 +33,7 @@ export function analyzeAndConfirm(accessToken) {
   // registrationStatus enum: DRAFT -> REGISTERED 로 추정
   const confirmRes = patchJson(
     `${baseUrl}/api/v1/job-postings/${jobMasterId}`,
-    { registrationStatus: 'REGISTERED' },
+    { registrationStatus: 'CONFIRMED' },
     authHeaders(accessToken)
   );
   // 성공(200) 또는 이미 등록된 경우(200) 기대
