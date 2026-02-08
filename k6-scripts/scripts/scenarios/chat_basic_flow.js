@@ -16,9 +16,13 @@ export function chatBasicFlow(accessToken, jobMasterId) {
 
   // 1) 채팅방 생성
   const roomName = `k6-room-${__VU}-${__ITER}`;
+  const roomGoal = (__ENV.ROOM_GOAL || 'INTERVIEW').trim();                                                              
+  const maxParticipants = parseInt(__ENV.MAX_PARTICIPANTS || '4', 10);         
+  const cutlineScore = parseInt(__ENV.CUTLINE_SCORE || '70', 10);              
+
   const createRes = postJson(
     `${baseUrl}/api/v1/job-postings/${jobMasterId}/chat-rooms`,
-    { roomName },
+    { roomName, roomGoal, maxParticipants, cutlineScore },
     authHeaders(accessToken)
   );
   expectStatusIn(createRes, [201, 200], 'chat.create-room');
