@@ -9,7 +9,7 @@ export function analyzeAndConfirm(accessToken) {
 
   // JobPostingAnalysisService.normalizeUrl()가 여러 파라미터를 제거하므로,
   // 제거 리스트에 없는 k6 파라미터로 유니크 URL을 만든다.
-  const uniqueUrl = `https://example.com/jobs/backend?k6_vu=${__VU}&k6_iter=${__ITER}`;
+  const uniqueUrl = `https://example.com/jobs/backend/k6-${__VU}-${__ITER}-${Date.now()}`;
 
   const analyzeRes = postJson(
     `${baseUrl}/api/v1/job-postings`,
