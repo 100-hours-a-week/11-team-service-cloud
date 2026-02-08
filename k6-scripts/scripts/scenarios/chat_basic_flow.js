@@ -47,9 +47,12 @@ export function chatBasicFlow(accessToken, jobMasterId) {
 
   // 3) 메시지 전송 (multipart/form-data)
   const content = `hello from k6 (vu=${__VU} iter=${__ITER})`;
+  // 빈 파일(0바이트) 하나를 multipart 트리거용으로 넣음                                                                       
+  const dummy = http.file('', `dummy-${__VU}-${__ITER}.txt`, 'text/plain');
   const msgForm = {
     messageType: 'TEXT',
     content,
+    file: dummy,
   };
 
   const sendRes = http.post(`${baseUrl}/api/v1/chat-rooms/${chatRoomId}/messages`, msgForm, {
