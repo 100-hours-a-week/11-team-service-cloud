@@ -57,13 +57,13 @@ resource "aws_instance" "bigbang_instance" {
       --region ap-northeast-2 \
       --query 'Parameter.Value' \
       --output text > /tmp/temp-env
-    mv /tmp/temp-env /home/ubuntu/11-team-service-cloud-develop/.env
+    mv /tmp/temp-env /home/ubuntu/11-team-service-cloud-develop/bootstrap/.env
 
     # 소유권 변경
     chown -R ubuntu:ubuntu /home/ubuntu/11-team-service-cloud-develop
 
     # 전체 환경 세팅
-    cd /home/ubuntu/11-team-service-cloud-develop
+    cd /home/ubuntu/11-team-service-cloud-develop/bootstrap
     make setup-all
   EOF
 
