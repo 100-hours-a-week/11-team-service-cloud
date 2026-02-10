@@ -14,7 +14,16 @@ const portfolioBytes = open('../fixtures/portfolio.pdf', 'b');
 export const options = {
   vus: vus(),
   duration: duration(),
+
+  // Prometheus remote write에서 url(동적 id 포함)로 time series 폭발하는 걸 방지
+  // api/name 태그로만 집계하도록 url system tag를 제외합니다.
+  systemTags: ['status', 'method', 'name', 'group', 'scenario'],
+
+  // 기본 요약 통계에 p(99)까지 포함 (stdout 가독성 ↑)
+  summaryTrendStats: ['count', 'avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'],
+
   thresholds: {
+    // 전체(모든 API 합산)도 같이 두면, "전체적으로 시스템이 망가졌는지"를 한눈에 봄
     http_req_failed: ['rate<0.02'],
     http_req_duration: ['p(95)<2500'],
 
@@ -63,7 +72,7 @@ export default function (data) {
   }
 
   // 채팅방 생성은 "해당 공고에 지원한 사용자"만 가능하므로 먼저 지원서를 제출합니다.
-  const applicationId = applyAndEvaluate(token, jobMasterId, resumeBytes, portfolioBytes);                                                               
+  const applicationId = applyAndEvaluate(token, jobMasterId, resumeBytes, portfolioBytes);
   if (!applicationId) {
     sleep(thinkTimeMs() / 1000);
     return;

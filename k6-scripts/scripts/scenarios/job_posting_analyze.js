@@ -14,7 +14,10 @@ export function analyzeAndConfirm(accessToken) {
   const analyzeRes = postJson(
     `${baseUrl}/api/v1/job-postings`,
     { url: uniqueUrl },
-    authHeaders(accessToken)
+    {
+      ...authHeaders(accessToken),
+      tags: { api: 'job-postings.analyze', name: 'job-postings.analyze' },
+    }
   );
   const ok = expectStatus(analyzeRes, 200, 'job-postings.analyze');
   if (!ok) return null;
@@ -34,7 +37,10 @@ export function analyzeAndConfirm(accessToken) {
   const confirmRes = patchJson(
     `${baseUrl}/api/v1/job-postings/${jobMasterId}`,
     { registrationStatus: 'CONFIRMED' },
-    authHeaders(accessToken)
+    {
+      ...authHeaders(accessToken),
+      tags: { api: 'job-postings.confirm', name: 'job-postings.confirm' },
+    }
   );
   // 성공(200) 또는 이미 등록된 경우(200) 기대
   expectStatus(confirmRes, 200, 'job-postings.confirm');

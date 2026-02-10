@@ -7,7 +7,9 @@ import { getJson, expectStatus } from '../lib/http.js';
 export function browseJobPostings() {
   const baseUrl = getBaseUrl();
 
-  const listRes = getJson(`${baseUrl}/api/v1/job-postings?size=20&status=OPEN&sort=DEADLINE_ASC`);
+  const listRes = getJson(`${baseUrl}/api/v1/job-postings?size=20&status=OPEN&sort=DEADLINE_ASC`, {
+    tags: { api: 'job-postings.list', name: 'job-postings.list' },
+  });
   expectStatus(listRes, 200, 'job-postings.list');
 
   const listBody = listRes.json();

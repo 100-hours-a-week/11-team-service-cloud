@@ -23,7 +23,10 @@ export function chatBasicFlow(accessToken, jobMasterId) {
   const createRes = postJson(
     `${baseUrl}/api/v1/job-postings/${jobMasterId}/chat-rooms`,
     { roomName, roomGoal, maxParticipants, cutlineScore },
-    authHeaders(accessToken)
+    {
+      ...authHeaders(accessToken),
+      tags: { api: 'chat.create-room', name: 'chat.create-room' },
+    }
   );
   expectStatusIn(createRes, [201, 200], 'chat.create-room');
 
@@ -47,7 +50,12 @@ export function chatBasicFlow(accessToken, jobMasterId) {
   const joinRes = http.post(
     `${baseUrl}/api/v1/chat-rooms/${chatRoomId}/members`,
     '',
-    { headers: { Authorization: `Bearer ${accessToken}` }, tags: { name: 'chat.join-room' } }
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      tags: { api: 'chat.join-room', name: 'chat.join-room' },
+      // 이 API는 이미 참가한 경우 409가 "정상"일 수 있어 k6의 expected_response 판단을 확장
+      responseCallback: http.expectedStatuses(200, 201, 409),
+    }
   );
   expectStatusIn(joinRes, [200, 201, 409], 'chat.join-room');
 
@@ -67,7 +75,7 @@ export function chatBasicFlow(accessToken, jobMasterId) {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
-    tags: { name: 'chat.send-message' },
+    tags: { api: 'chat.send-message', name: 'chat.send-message' },
   });
 
   expectStatusIn(sendRes, [201, 200], 'chat.send-message');
@@ -77,7 +85,7 @@ export function chatBasicFlow(accessToken, jobMasterId) {
   // 4) 메시지 목록
   const listRes = getJson(`${baseUrl}/api/v1/chat-rooms/${chatRoomId}/messages?size=50`, {
     headers: { Authorization: `Bearer ${accessToken}` },
-    tags: { name: 'chat.list-messages' },
+    tags: { api: 'chat.list-messages', name: 'chat.list-messages' },
   });
   expectStatusIn(listRes, [200], 'chat.list-messages');
 
@@ -86,7 +94,7 @@ export function chatBasicFlow(accessToken, jobMasterId) {
   // 5) 멤버 목록
   const membersRes = getJson(`${baseUrl}/api/v1/chat-rooms/${chatRoomId}/members`, {
     headers: { Authorization: `Bearer ${accessToken}` },
-    tags: { name: 'chat.list-members' },
+    tags: { api: 'chat.list-members', name: 'chat.list-members' },
   });
   expectStatusIn(membersRes, [200], 'chat.list-members');
 

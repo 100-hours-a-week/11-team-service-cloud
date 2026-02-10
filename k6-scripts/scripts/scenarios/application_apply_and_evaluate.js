@@ -22,7 +22,7 @@ export function applyAndEvaluate(accessToken, jobMasterId, resumeBytes, portfoli
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
-    tags: { name: 'applications.apply' },
+    tags: { api: 'applications.apply', name: 'applications.apply' },
   });
 
   // ApiResponse<Long>
@@ -40,7 +40,12 @@ export function applyAndEvaluate(accessToken, jobMasterId, resumeBytes, portfoli
   const reqRes = postJson(
     `${baseUrl}/api/v1/applications/${applicationId}/analyses`,
     { analysis_type: 'EVALUATION' },
-    authHeaders(accessToken)
+    {
+      ...authHeaders(accessToken),
+      tags: { api: 'applications.request-analyses', name: 'applications.request-analyses' },
+      // 이 API는 중복 요청/이미 처리된 경우 409, 비동기 접수 202가 "정상"일 수 있음
+      responseCallback: http.expectedStatuses(200, 202, 409),
+    }
   );
   // 컨트롤러에서 202 리턴
   expectStatusIn(reqRes, [202, 200, 409], 'applications.request-analyses');
@@ -57,7 +62,7 @@ export function applyAndEvaluate(accessToken, jobMasterId, resumeBytes, portfoli
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
-      tags: { name: 'applications.get-analysis' },
+      tags: { api: 'applications.get-analysis', name: 'applications.get-analysis' },
     });
 
     if (res.status === 200) {                                                    
