@@ -164,9 +164,9 @@ ssh_key_name = "my-key-pair"
 EC2 인스턴스 생성 시 자동으로 실행:
 
 1. 패키지 업데이트 및 필수 도구 설치 (make, wget, awscli)
-2. GitHub에서 프로젝트 코드 다운로드 (develop 브랜치)
-3. AWS Parameter Store에서 `.env` 파일 가져오기
-4. `make setup-all`로 전체 환경 세팅
+2. GitHub에서 프로젝트 코드 다운로드
+3. AWS Parameter Store에서 `.env` 파일 가져오기 (`cloud/bootstrap/.env`로 저장)
+4. `make setup-all`로 전체 환경 세팅 (Nginx, MySQL, Java, Node, Python 등 설치)
 5. Nginx 설치 및 SSL 인증서 자동 발급 (Certbot)
 
 ### DNS 설정 (필수)
@@ -187,12 +187,14 @@ Terraform으로 EC2 인스턴스 생성 후, user_data 스크립트가 자동으
 DNS 설정이 늦어지면 Certbot이 실패하며, 이 경우 인스턴스에 접속하여 수동으로 SSL 설정을 진행해야 합니다:
 
 ```bash
-sudo /home/ubuntu/cloud/scripts/setup/ssl/setup-ssl.sh
+# 서버 접속 후
+cd ~/project/cloud/bootstrap
+sudo ./scripts/setup/ssl/setup-ssl.sh
 ```
 
 # 5. 환경 변수
 
-`.env.example`을 복사하여 `.env`를 생성하고 환경에 맞게 수정:
+`bootstrap/.env.example`을 복사하여 `.env`를 생성하고 환경에 맞게 수정:
 
 | 변수                | 설명                           |
 | ------------------- | ------------------------------ |
@@ -217,7 +219,7 @@ sudo /home/ubuntu/cloud/scripts/setup/ssl/setup-ssl.sh
 #### 1. .env 파일 생성 및 수정
 
 ```bash
-cd cloud
+cd cloud/bootstrap
 cp .env.example .env
 vi .env  # 실제 값으로 수정
 ```
