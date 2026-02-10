@@ -3,6 +3,7 @@ import { sleep } from 'k6';
 import { vus, duration, thinkTimeMs } from './lib/config.js';
 import { getTokenOrRefresh, pickTokenForVu } from './lib/auth.js';
 import { analyzeAndConfirm } from './scenarios/job_posting_analyze.js';
+import { createApiHandleSummary } from './lib/summary.js';
 
 export const options = {
   vus: vus(),
@@ -12,6 +13,11 @@ export const options = {
     http_req_duration: ['p(95)<2500'],
   },
 };
+
+export const handleSummary = createApiHandleSummary([
+  'job-postings.analyze',
+  'job-postings.confirm',
+]);
 
 export function setup() {
   return getTokenOrRefresh();

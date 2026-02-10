@@ -3,6 +3,7 @@ import { sleep } from 'k6';
 import { vus, duration, thinkTimeMs } from './lib/config.js';
 import { getTokenOrRefresh } from './lib/auth.js';
 import { browseJobPostings } from './scenarios/browse_job_postings.js';
+import { createApiHandleSummary } from './lib/summary.js';
 
 export const options = {
   vus: vus(),
@@ -11,6 +12,8 @@ export const options = {
     http_req_failed: ['rate<0.01'],
     http_req_duration: ['p(95)<1500'],
   },
+
+export const handleSummary = createApiHandleSummary(['job-postings.list']);
 };
 
 export function setup() {

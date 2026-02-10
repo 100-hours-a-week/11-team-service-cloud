@@ -5,6 +5,7 @@ import { getTokenOrRefresh, pickTokenForVu } from './lib/auth.js';
 import { analyzeAndConfirm } from './scenarios/job_posting_analyze.js';
 import { applyAndEvaluate } from './scenarios/application_apply_and_evaluate.js';
 import { chatBasicFlow } from './scenarios/chat_basic_flow.js';
+import { createApiHandleSummary } from './lib/summary.js';
 
 // k6는 로컬 파일을 open()으로 읽어 multipart에 넣는 패턴이 안정적입니다.
 const resumeBytes = open('../fixtures/resume.pdf', 'b');
@@ -16,6 +17,23 @@ export const options = {
   thresholds: {
     http_req_failed: ['rate<0.02'],
     http_req_duration: ['p(95)<2500'],
+
+    // 채팅 API별 (tags: { api: '...' })
+    'http_req_duration{api:chat.send-message}': ['p(95)<300'],
+    'http_req_failed{api:chat.send-message}': ['rate<0.01'],
+
+    'http_req_duration{api:chat.list-messages}': ['p(95)<800'],
+    'http_req_failed{api:chat.list-messages}': ['rate<0.02'],
+
+    'http_req_duration{api:chat.list-members}': ['p(95)<800'],
+    'http_req_failed{api:chat.list-members}': ['rate<0.02'],
+
+    // (원하면 여기도 SLA 걸 수 있음)
+    'http_req_duration{api:chat.create-room}': ['p(95)<1500'],
+    'http_req_failed{api:chat.create-room}': ['rate<0.02'],
+
+    'http_req_duration{api:chat.join-room}': ['p(95)<1500'],
+    'http_req_failed{api:chat.join-room}': ['rate<0.02'],
   },
 };
 
@@ -26,6 +44,14 @@ export function setup() {
   // 3) LOADTEST_SECRET이 있으면 loadtest 토큰 배치 발급 API 사용
   return getTokenOrRefresh();
 }
+
+export const handleSummary = createApiHandleSummary([
+  'chat.create-room',
+  'chat.join-room',
+  'chat.send-message',
+  'chat.list-messages',
+  'chat.list-members',
+]);
 
 export default function (data) {
   const token = pickTokenForVu(data);
