@@ -31,5 +31,4 @@ export function setup() {
 export default function (data) {
   // quick는 '읽기' 위주의 트래픽 (익명 접근 가능)
   browseJobPostings();
-  sleep(thinkTimeMs() / 1000);
 }
