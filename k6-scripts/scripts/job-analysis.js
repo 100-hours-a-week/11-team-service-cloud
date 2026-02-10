@@ -37,5 +37,4 @@ export function setup() {
 export default function (data) {
   const token = pickTokenForVu(data);
   analyzeAndConfirm(token);
-  sleep(thinkTimeMs() / 1000);
 }

@@ -79,6 +79,4 @@ export default function (data) {
   }
 
   chatBasicFlow(token, jobMasterId);
-
-  sleep(thinkTimeMs() / 1000);
 }

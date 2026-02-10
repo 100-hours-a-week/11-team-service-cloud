@@ -98,5 +98,6 @@ export function chatBasicFlow(accessToken, jobMasterId) {
   });
   expectStatusIn(membersRes, [200], 'chat.list-members');
 
+  sleep(thinkTimeMs() / 1000);
   return chatRoomId;
 }

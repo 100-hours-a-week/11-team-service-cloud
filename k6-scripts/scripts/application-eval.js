@@ -59,6 +59,4 @@ export default function (data) {
   if (jobMasterId) {
     applyAndEvaluate(token, jobMasterId, resumeBytes, portfolioBytes);
   }
-
-  sleep(thinkTimeMs() / 1000);
 }
