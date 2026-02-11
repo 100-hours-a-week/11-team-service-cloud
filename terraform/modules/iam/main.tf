@@ -1,10 +1,12 @@
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
-# EC2 인스턴스가 Parameter Store에 접근할 수 있도록 IAM 역할 생성
+# EC2 instances need an instance profile role for:
+# - SSM (Session Manager)
+# - optional S3 read (deployment artifacts)
+# - optional Parameter Store read
 
-# IAM 역할 생성
-resource "aws_iam_role" "ec2_ssm_role" {
+resource "aws_iam_role" "ec2_role" {
   name = "ec2-ssm-role"
 
   assume_role_policy = jsonencode({
@@ -25,10 +27,16 @@ resource "aws_iam_role" "ec2_ssm_role" {
   }
 }
 
-# Parameter Store 읽기 권한 정책
+# Attach the AWS managed policy required for SSM Managed Instances
+resource "aws_iam_role_policy_attachment" "ssm_core" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+# Parameter Store read (scoped by prefix)
 resource "aws_iam_role_policy" "ssm_read_policy" {
   name = "ssm-read-policy"
-  role = aws_iam_role.ec2_ssm_role.id
+  role = aws_iam_role.ec2_role.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -40,21 +48,22 @@ resource "aws_iam_role_policy" "ssm_read_policy" {
           "ssm:GetParameters",
           "ssm:GetParametersByPath"
         ]
-        Resource = "arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter/bigbang/*"
+        Resource = "arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter${trimprefix(var.ssm_parameter_prefix, "/") == "" ? "" : "/"}${trimprefix(var.ssm_parameter_prefix, "/")}*"
       }
     ]
   })
 }
 
-# S3 접근 권한 정책 (배포를 위해)
+# S3 read for deployment buckets (optional)
 resource "aws_iam_role_policy" "s3_read_policy" {
+  count = length(var.deployment_buckets) > 0 ? 1 : 0
+
   name = "s3-read-policy"
-  role = aws_iam_role.ec2_ssm_role.id
+  role = aws_iam_role.ec2_role.id
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = concat(
-      # ListBucket 권한 (bucket 단위)
       [
         for bucket in var.deployment_buckets : {
           Effect = "Allow"
@@ -65,7 +74,6 @@ resource "aws_iam_role_policy" "s3_read_policy" {
           Resource = "arn:aws:s3:::${bucket}"
         }
       ],
-      # GetObject 권한 (object 단위)
       [
         for bucket in var.deployment_buckets : {
           Effect = "Allow"
@@ -80,10 +88,9 @@ resource "aws_iam_role_policy" "s3_read_policy" {
   })
 }
 
-# IAM 인스턴스 프로필 생성
 resource "aws_iam_instance_profile" "ec2_profile" {
   name = "ec2-ssm-profile"
-  role = aws_iam_role.ec2_ssm_role.name
+  role = aws_iam_role.ec2_role.name
 
   tags = {
     Name = "ec2-ssm-profile"

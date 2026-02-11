@@ -3,3 +3,9 @@ variable "deployment_buckets" {
   type        = list(string)
   default     = []
 }
+
+variable "ssm_parameter_prefix" {
+  description = "SSM Parameter Store path prefix the instances may read (e.g., /scuad/dev/)"
+  type        = string
+  default     = "/"
+}
