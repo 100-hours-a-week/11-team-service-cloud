@@ -133,7 +133,7 @@ resource "aws_launch_template" "app_spring" {
   image_id      = data.aws_ssm_parameter.ubuntu_2404_ami.value
   instance_type = var.app_instance_type
 
-  vpc_security_group_ids = [module.network.app_security_group_id]
+  vpc_security_group_ids = [module.network.app_spring_security_group_id]
 
   iam_instance_profile { name = module.iam.iam_instance_profile_name }
 
@@ -159,7 +159,7 @@ resource "aws_launch_template" "app_ai" {
   image_id      = data.aws_ssm_parameter.ubuntu_2404_ami.value
   instance_type = var.ai_instance_type
 
-  vpc_security_group_ids = [module.network.app_security_group_id]
+  vpc_security_group_ids = [module.network.app_ai_security_group_id]
 
   iam_instance_profile { name = module.iam.iam_instance_profile_name }
 

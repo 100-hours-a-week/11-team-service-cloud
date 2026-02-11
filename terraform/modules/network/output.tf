@@ -64,9 +64,20 @@ output "web_security_group_id" {
   description = "Web instances security group ID"
 }
 
+output "app_spring_security_group_id" {
+  value       = aws_security_group.app_spring.id
+  description = "Spring app instances security group ID"
+}
+
+output "app_ai_security_group_id" {
+  value       = aws_security_group.app_ai.id
+  description = "AI app instances security group ID"
+}
+
+# Legacy name for older callers
 output "app_security_group_id" {
-  value       = aws_security_group.app.id
-  description = "App instances security group ID"
+  value       = aws_security_group.app_spring.id
+  description = "(Legacy) App security group ID"
 }
 
 output "rds_security_group_id" {
