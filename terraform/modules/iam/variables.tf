@@ -1,3 +1,8 @@
+variable "name_prefix" {
+  description = "Resource name prefix (e.g., project-env)"
+  type        = string
+}
+
 variable "deployment_buckets" {
   description = "List of S3 bucket names for deployment"
   type        = list(string)

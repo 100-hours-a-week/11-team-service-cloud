@@ -20,6 +20,7 @@ locals {
 module "iam" {
   source = "../../modules/iam"
 
+  name_prefix          = local.name_prefix
   deployment_buckets   = var.deployment_buckets
   ssm_parameter_prefix = "/${var.project_name}/${local.environment}/"
 }
