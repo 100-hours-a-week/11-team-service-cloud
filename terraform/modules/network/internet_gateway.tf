@@ -1,8 +1,8 @@
-# Internet Gateway
+resource "aws_internet_gateway" "this" {
+  vpc_id = aws_vpc.this.id
 
-resource "aws_internet_gateway" "prod" {
-  vpc_id = aws_vpc.prod.id
   tags = {
-    Name = "prod-igw"
+    Name        = "${var.name_prefix}-igw"
+    Environment = var.environment
   }
 }

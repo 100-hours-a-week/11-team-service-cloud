@@ -1,12 +1,11 @@
-# VPC 생성
-
-resource "aws_vpc" "prod" {
-  cidr_block                       = "10.0.0.0/16"
-  assign_generated_ipv6_cidr_block = true
+resource "aws_vpc" "this" {
+  cidr_block = var.vpc_cidr
 
   enable_dns_hostnames = true
   enable_dns_support   = true
+  
   tags = {
-    Name = "prod-vpc"
+    Name        = "${var.name_prefix}-vpc"
+    Environment = var.environment
   }
 }

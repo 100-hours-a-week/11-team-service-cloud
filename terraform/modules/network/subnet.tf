@@ -1,65 +1,132 @@
-# 퍼블릭 서브넷
+locals {
+  # We carve the /16 VPC into /21 subnets (adds 5 bits => 32 possible /21 blocks).
+  # Index mapping (per env):
+  #  0: public-a (ALB)
+  #  1: public-c (ALB)
+  #  2: web-private-a
+  #  3: web-private-c
+  #  4: app-private-a
+  #  5: app-private-c
+  #  6: data-private-a (RDS)
+  #  7: data-private-c (RDS)
+  subnet_newbits = 5
 
-resource "aws_subnet" "prod_public_a" {
-  vpc_id                          = aws_vpc.prod.id
-  cidr_block                      = "10.0.1.0/24"
-  ipv6_cidr_block                 = cidrsubnet(aws_vpc.prod.ipv6_cidr_block, 8, 1)
-  availability_zone               = "ap-northeast-2a"
-  map_public_ip_on_launch         = true
-  assign_ipv6_address_on_creation = true
-  tags = {
-    Name = "prod-public-subnet-a"
+  cidrs = {
+    public_a       = cidrsubnet(var.vpc_cidr, local.subnet_newbits, 0)
+    public_b       = cidrsubnet(var.vpc_cidr, local.subnet_newbits, 1)
+    web_private_a  = cidrsubnet(var.vpc_cidr, local.subnet_newbits, 2)
+    web_private_b  = cidrsubnet(var.vpc_cidr, local.subnet_newbits, 3)
+    app_private_a  = cidrsubnet(var.vpc_cidr, local.subnet_newbits, 4)
+    app_private_b  = cidrsubnet(var.vpc_cidr, local.subnet_newbits, 5)
+    data_private_a = cidrsubnet(var.vpc_cidr, local.subnet_newbits, 6)
+    data_private_b = cidrsubnet(var.vpc_cidr, local.subnet_newbits, 7)
   }
 }
 
-resource "aws_subnet" "prod_public_b" {
-  vpc_id                          = aws_vpc.prod.id
-  cidr_block                      = "10.0.2.0/24"
-  ipv6_cidr_block                 = cidrsubnet(aws_vpc.prod.ipv6_cidr_block, 8, 2)
-  availability_zone               = "ap-northeast-2b"
-  map_public_ip_on_launch         = true
-  assign_ipv6_address_on_creation = true
+# Public subnets (ALB)
+resource "aws_subnet" "public_a" {
+  vpc_id                  = aws_vpc.this.id
+  cidr_block              = local.cidrs.public_a
+  availability_zone       = var.azs[0]
+  map_public_ip_on_launch = true
+
   tags = {
-    Name = "prod-public-subnet-b"
+    Name        = "${var.name_prefix}-public-${var.azs[0]}"
+    Tier        = "public"
+    Environment = var.environment
   }
 }
 
-# 프라이빗 APP 서브넷
+resource "aws_subnet" "public_b" {
+  vpc_id                  = aws_vpc.this.id
+  cidr_block              = local.cidrs.public_b
+  availability_zone       = var.azs[1]
+  map_public_ip_on_launch = true
 
-resource "aws_subnet" "prod_app_private_a" {
-  vpc_id            = aws_vpc.prod.id
-  cidr_block        = "10.0.8.0/21"
-  availability_zone = "ap-northeast-2a"
   tags = {
-    Name = "prod-app-private-subnet-a"
+    Name        = "${var.name_prefix}-public-${var.azs[1]}"
+    Tier        = "public"
+    Environment = var.environment
   }
 }
 
-resource "aws_subnet" "prod_app_private_b" {
-  vpc_id            = aws_vpc.prod.id
-  cidr_block        = "10.0.16.0/21"
-  availability_zone = "ap-northeast-2b"
+# Web private subnets (behind ALB)
+resource "aws_subnet" "web_private_a" {
+  vpc_id            = aws_vpc.this.id
+  cidr_block        = local.cidrs.web_private_a
+  availability_zone = var.azs[0]
+
   tags = {
-    Name = "prod-app-private-subnet-b"
+    Name        = "${var.name_prefix}-web-private-${var.azs[0]}"
+    Tier        = "web"
+    Visibility  = "private"
+    Environment = var.environment
   }
 }
 
-# 프라이빗 DB 서브넷
+resource "aws_subnet" "web_private_b" {
+  vpc_id            = aws_vpc.this.id
+  cidr_block        = local.cidrs.web_private_b
+  availability_zone = var.azs[1]
 
-resource "aws_subnet" "prod_db_private_a" {
-  vpc_id            = aws_vpc.prod.id
-  cidr_block        = "10.0.3.0/24"
-  availability_zone = "ap-northeast-2a"
   tags = {
-    Name = "prod-db-private-subnet-a"
+    Name        = "${var.name_prefix}-web-private-${var.azs[1]}"
+    Tier        = "web"
+    Visibility  = "private"
+    Environment = var.environment
   }
 }
 
-resource "aws_subnet" "prod_db_private_b" {
-  vpc_id            = aws_vpc.prod.id
-  cidr_block        = "10.0.4.0/24"
-  availability_zone = "ap-northeast-2b"
+# App private subnets
+resource "aws_subnet" "app_private_a" {
+  vpc_id            = aws_vpc.this.id
+  cidr_block        = local.cidrs.app_private_a
+  availability_zone = var.azs[0]
+
   tags = {
-    Name = "prod-db-private-subnet-b"
+    Name        = "${var.name_prefix}-app-private-${var.azs[0]}"
+    Tier        = "app"
+    Visibility  = "private"
+    Environment = var.environment
+  }
+}
+
+resource "aws_subnet" "app_private_b" {
+  vpc_id            = aws_vpc.this.id
+  cidr_block        = local.cidrs.app_private_b
+  availability_zone = var.azs[1]
+
+  tags = {
+    Name        = "${var.name_prefix}-app-private-${var.azs[1]}"
+    Tier        = "app"
+    Visibility  = "private"
+    Environment = var.environment
+  }
+}
+
+# Data private subnets (RDS)
+resource "aws_subnet" "data_private_a" {
+  vpc_id            = aws_vpc.this.id
+  cidr_block        = local.cidrs.data_private_a
+  availability_zone = var.azs[0]
+
+  tags = {
+    Name        = "${var.name_prefix}-data-private-${var.azs[0]}"
+    Tier        = "data"
+    Visibility  = "private"
+    Environment = var.environment
+  }
+}
+
+resource "aws_subnet" "data_private_b" {
+  vpc_id            = aws_vpc.this.id
+  cidr_block        = local.cidrs.data_private_b
+  availability_zone = var.azs[1]
+
+  tags = {
+    Name        = "${var.name_prefix}-data-private-${var.azs[1]}"
+    Tier        = "data"
+    Visibility  = "private"
+    Environment = var.environment
   }
 }

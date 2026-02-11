@@ -1,57 +1,64 @@
-# 퍼블릭 라우트 테이블
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.this.id
 
-resource "aws_route_table" "prod_public" {
-  vpc_id = aws_vpc.prod.id
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.prod.id
+    gateway_id = aws_internet_gateway.this.id
   }
-  route {
-    ipv6_cidr_block = "::/0"
-    gateway_id      = aws_internet_gateway.prod.id
-  }
+
   tags = {
-    Name = "prod-public-rt"
+    Name        = "${var.name_prefix}-public-rt"
+    Environment = var.environment
   }
 }
 
-# 프라이빗 라우트 테이블 (NAT Gateway 없이 로컬 통신만)
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.this.id
 
-resource "aws_route_table" "prod_private" {
-  vpc_id = aws_vpc.prod.id
   tags = {
-    Name = "prod-private-rt"
+    Name        = "${var.name_prefix}-private-rt"
+    Environment = var.environment
   }
 }
 
-resource "aws_route_table_association" "prod_app_private_a" {
-  subnet_id      = aws_subnet.prod_app_private_a.id
-  route_table_id = aws_route_table.prod_private.id
+# Associate public route table
+resource "aws_route_table_association" "public_a" {
+  subnet_id      = aws_subnet.public_a.id
+  route_table_id = aws_route_table.public.id
 }
 
-resource "aws_route_table_association" "prod_app_private_b" {
-  subnet_id      = aws_subnet.prod_app_private_b.id
-  route_table_id = aws_route_table.prod_private.id
+resource "aws_route_table_association" "public_b" {
+  subnet_id      = aws_subnet.public_b.id
+  route_table_id = aws_route_table.public.id
 }
 
-resource "aws_route_table_association" "prod_db_private_a" {
-  subnet_id      = aws_subnet.prod_db_private_a.id
-  route_table_id = aws_route_table.prod_private.id
+# Associate private route table (no NAT)
+resource "aws_route_table_association" "web_private_a" {
+  subnet_id      = aws_subnet.web_private_a.id
+  route_table_id = aws_route_table.private.id
 }
 
-resource "aws_route_table_association" "prod_db_private_b" {
-  subnet_id      = aws_subnet.prod_db_private_b.id
-  route_table_id = aws_route_table.prod_private.id
+resource "aws_route_table_association" "web_private_b" {
+  subnet_id      = aws_subnet.web_private_b.id
+  route_table_id = aws_route_table.private.id
 }
 
-# 라우트 테이블 연결
-
-resource "aws_route_table_association" "prod_public_a" {
-  subnet_id      = aws_subnet.prod_public_a.id
-  route_table_id = aws_route_table.prod_public.id
+resource "aws_route_table_association" "app_private_a" {
+  subnet_id      = aws_subnet.app_private_a.id
+  route_table_id = aws_route_table.private.id
 }
 
-resource "aws_route_table_association" "prod_public_b" {
-  subnet_id      = aws_subnet.prod_public_b.id
-  route_table_id = aws_route_table.prod_public.id
+resource "aws_route_table_association" "app_private_b" {
+  subnet_id      = aws_subnet.app_private_b.id
+  route_table_id = aws_route_table.private.id
+}
+
+resource "aws_route_table_association" "data_private_a" {
+  subnet_id      = aws_subnet.data_private_a.id
+  route_table_id = aws_route_table.private.id
+}
+
+resource "aws_route_table_association" "data_private_b" {
+  subnet_id      = aws_subnet.data_private_b.id
+  route_table_id = aws_route_table.private.id
 }
