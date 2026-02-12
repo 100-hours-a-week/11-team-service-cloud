@@ -55,7 +55,7 @@ variable "web_asg_max" {
 
 variable "app_instance_type" {
   type    = string
-  default = "t3.medium"
+  default = "t3.small"
 }
 
 variable "app_spring_asg_min" {
@@ -75,7 +75,7 @@ variable "app_spring_asg_max" {
 
 variable "ai_instance_type" {
   type    = string
-  default = "t3.medium"
+  default = "t3.small"
 }
 
 variable "ai_asg_min" {
