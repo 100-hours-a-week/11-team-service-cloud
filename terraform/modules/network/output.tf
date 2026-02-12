@@ -3,8 +3,30 @@ output "vpc_id" {
   description = "VPC ID"
 }
 
+locals {
+  public_subnet_ids = concat(
+    [aws_subnet.public_a.id],
+    length(aws_subnet.public_b) > 0 ? [aws_subnet.public_b[0].id] : []
+  )
+
+  web_private_subnet_ids = concat(
+    [aws_subnet.web_private_a.id],
+    length(aws_subnet.web_private_b) > 0 ? [aws_subnet.web_private_b[0].id] : []
+  )
+
+  app_private_subnet_ids = concat(
+    [aws_subnet.app_private_a.id],
+    length(aws_subnet.app_private_b) > 0 ? [aws_subnet.app_private_b[0].id] : []
+  )
+
+  data_private_subnet_ids = concat(
+    [aws_subnet.data_private_a.id],
+    length(aws_subnet.data_private_b) > 0 ? [aws_subnet.data_private_b[0].id] : []
+  )
+}
+
 output "public_subnet_ids" {
-  value       = [aws_subnet.public_a.id, aws_subnet.public_b.id]
+  value       = local.public_subnet_ids
   description = "Public subnet IDs (for ALB)"
 }
 
@@ -15,22 +37,22 @@ output "public_subnet_a_id" {
 }
 
 output "public_subnet_b_id" {
-  value       = aws_subnet.public_b.id
+  value       = try(aws_subnet.public_b[0].id, null)
   description = "(Legacy) Public subnet B ID"
 }
 
 output "web_private_subnet_ids" {
-  value       = [aws_subnet.web_private_a.id, aws_subnet.web_private_b.id]
+  value       = local.web_private_subnet_ids
   description = "Web private subnet IDs"
 }
 
 output "app_private_subnet_ids" {
-  value       = [aws_subnet.app_private_a.id, aws_subnet.app_private_b.id]
+  value       = local.app_private_subnet_ids
   description = "App private subnet IDs"
 }
 
 output "data_private_subnet_ids" {
-  value       = [aws_subnet.data_private_a.id, aws_subnet.data_private_b.id]
+  value       = local.data_private_subnet_ids
   description = "Data private subnet IDs (for RDS)"
 }
 
@@ -40,7 +62,7 @@ output "app_private_subnet_a_id" {
 }
 
 output "app_private_subnet_b_id" {
-  value       = aws_subnet.app_private_b.id
+  value       = try(aws_subnet.app_private_b[0].id, null)
   description = "(Legacy) App private subnet B ID"
 }
 
@@ -50,7 +72,7 @@ output "db_private_subnet_a_id" {
 }
 
 output "db_private_subnet_b_id" {
-  value       = aws_subnet.data_private_b.id
+  value       = try(aws_subnet.data_private_b[0].id, null)
   description = "(Legacy) DB private subnet B ID"
 }
 

@@ -15,7 +15,7 @@ variable "vpc_cidr" {
 
 variable "azs" {
   type    = list(string)
-  default = ["ap-northeast-2a", "ap-northeast-2c"]
+  default = ["ap-northeast-2a", "ap-northeast-2b"]
 }
 
 variable "deployment_buckets" {

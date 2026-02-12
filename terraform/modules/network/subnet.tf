@@ -2,14 +2,16 @@ locals {
   # We carve the /16 VPC into /21 subnets (adds 5 bits => 32 possible /21 blocks).
   # Index mapping (per env):
   #  0: public-a (ALB)
-  #  1: public-c (ALB)
+  #  1: public-b (ALB)
   #  2: web-private-a
-  #  3: web-private-c
+  #  3: web-private-b
   #  4: app-private-a
-  #  5: app-private-c
+  #  5: app-private-b
   #  6: data-private-a (RDS)
-  #  7: data-private-c (RDS)
+  #  7: data-private-b (RDS)
   subnet_newbits = 5
+
+  has_az_b = length(var.azs) > 1
 
   cidrs = {
     public_a       = cidrsubnet(var.vpc_cidr, local.subnet_newbits, 0)
@@ -38,6 +40,8 @@ resource "aws_subnet" "public_a" {
 }
 
 resource "aws_subnet" "public_b" {
+  count = local.has_az_b ? 1 : 0
+
   vpc_id                  = aws_vpc.this.id
   cidr_block              = local.cidrs.public_b
   availability_zone       = var.azs[1]
@@ -65,6 +69,8 @@ resource "aws_subnet" "web_private_a" {
 }
 
 resource "aws_subnet" "web_private_b" {
+  count = local.has_az_b ? 1 : 0
+
   vpc_id            = aws_vpc.this.id
   cidr_block        = local.cidrs.web_private_b
   availability_zone = var.azs[1]
@@ -92,6 +98,8 @@ resource "aws_subnet" "app_private_a" {
 }
 
 resource "aws_subnet" "app_private_b" {
+  count = local.has_az_b ? 1 : 0
+
   vpc_id            = aws_vpc.this.id
   cidr_block        = local.cidrs.app_private_b
   availability_zone = var.azs[1]
@@ -119,6 +127,8 @@ resource "aws_subnet" "data_private_a" {
 }
 
 resource "aws_subnet" "data_private_b" {
+  count = local.has_az_b ? 1 : 0
+
   vpc_id            = aws_vpc.this.id
   cidr_block        = local.cidrs.data_private_b
   availability_zone = var.azs[1]

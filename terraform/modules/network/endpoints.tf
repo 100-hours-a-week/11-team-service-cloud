@@ -65,8 +65,12 @@ resource "aws_vpc_endpoint" "interface" {
   vpc_endpoint_type   = "Interface"
   private_dns_enabled = true
 
-  # Put interface endpoints into the private subnets where instances live.
-  subnet_ids         = [aws_subnet.web_private_a.id, aws_subnet.web_private_b.id, aws_subnet.app_private_a.id, aws_subnet.app_private_b.id]
+  # Interface endpoints require subnets in *different AZs* (one per AZ).
+  # Put them in the app private subnets (instances in the VPC can still reach them via private DNS).
+  subnet_ids = concat(
+    [aws_subnet.app_private_a.id],
+    length(aws_subnet.app_private_b) > 0 ? [aws_subnet.app_private_b[0].id] : []
+  )
   security_group_ids = [aws_security_group.endpoints.id]
 
   tags = {
