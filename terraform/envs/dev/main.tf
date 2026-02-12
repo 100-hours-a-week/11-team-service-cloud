@@ -131,7 +131,19 @@ resource "aws_launch_template" "web" {
     name = module.iam.iam_instance_profile_name
   }
 
-  user_data = base64encode("#!/bin/bash\nset -e\n# web bootstrap here\n")
+  user_data = base64encode(<<-EOF
+    #!/bin/bash
+    set -e
+
+    # Assumes Docker is already installed in the custom AMI.
+    sudo systemctl enable --now docker || true
+
+    # Run a simple nginx container to satisfy ALB health checks.
+    # Host port 3000 -> container port 80
+    sudo docker rm -f web-nginx || true
+    sudo docker run -d --restart=always --name web-nginx -p 3000:80 nginx:stable
+  EOF
+  )
 
   tag_specifications {
     resource_type = "instance"

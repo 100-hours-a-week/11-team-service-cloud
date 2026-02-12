@@ -111,7 +111,14 @@ resource "aws_launch_template" "web" {
 
   iam_instance_profile { name = module.iam.iam_instance_profile_name }
 
-  user_data = base64encode("#!/bin/bash\nset -e\n")
+  user_data = base64encode(<<-EOF
+    #!/bin/bash
+    set -e
+    sudo systemctl enable --now docker || true
+    sudo docker rm -f web-nginx || true
+    sudo docker run -d --restart=always --name web-nginx -p 3000:80 nginx:stable
+  EOF
+  )
 }
 
 resource "aws_autoscaling_group" "web" {
