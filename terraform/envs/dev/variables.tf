@@ -30,7 +30,7 @@ variable "allowed_ssh_cidrs" {
 
 variable "ssm_human_role_names" {
   type    = list(string)
-  default = ["project-admin", "project-member"]
+  default = []
 }
 
 # ---- ASG sizing ----
