@@ -157,11 +157,11 @@ resource "aws_security_group" "rds" {
   vpc_id      = aws_vpc.this.id
 
   ingress {
-    description     = "MySQL from spring"
+    description     = "MySQL from spring and ai"
     from_port       = 3306
     to_port         = 3306
     protocol        = "tcp"
-    security_groups = [aws_security_group.app_spring.id]
+    security_groups = [aws_security_group.app_spring.id, aws_security_group.app_ai.id]
   }
 
   egress {
