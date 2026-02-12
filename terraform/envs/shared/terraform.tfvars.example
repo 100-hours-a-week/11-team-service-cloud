@@ -2,6 +2,6 @@
 region = "ap-northeast-2"
 project_name = "scuad"
 
-ecr_repository_name = "scuad-backend"
+ecr_repository_name = "scuad-registry"
 # Keep last N tagged images
 # ecr_lifecycle_keep_last = 50
