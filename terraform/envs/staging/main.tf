@@ -82,7 +82,7 @@ resource "aws_lb" "public" {
 
 resource "aws_lb_target_group" "web" {
   name     = "${local.name_prefix}-web-tg"
-  port     = 80
+  port     = 3000
   protocol = "HTTP"
   vpc_id   = module.network.vpc_id
 }
