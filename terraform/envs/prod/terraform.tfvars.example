@@ -9,17 +9,17 @@ azs      = ["ap-northeast-2a", "ap-northeast-2c"]
 
 ssm_human_role_names = ["role-name-1", "role-name-2"]
 
-web_instance_type = "t3.medium"
+web_instance_type = "t3.small"
 web_asg_min       = 2
 web_asg_desired   = 2
 web_asg_max       = 10
 
-app_instance_type      = "t3.medium"
+app_instance_type      = "t3.small"
 app_spring_asg_min     = 2
 app_spring_asg_desired = 2
 app_spring_asg_max     = 10
 
-ai_instance_type = "t3.medium"
+ai_instance_type = "t3.small"
 ai_asg_min       = 2
 ai_asg_desired   = 2
 ai_asg_max       = 10

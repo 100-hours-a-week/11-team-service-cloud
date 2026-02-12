@@ -22,19 +22,19 @@ ssm_human_role_names = ["role-name-1", "role-name-2"]
 web_instance_type = "t3.small"
 web_asg_min       = 1
 web_asg_desired   = 1
-web_asg_max       = 2
+web_asg_max       = 1
 
 # ---- App (Spring) ASG ----
 app_instance_type      = "t3.small"
 app_spring_asg_min     = 1
 app_spring_asg_desired = 1
-app_spring_asg_max     = 2
+app_spring_asg_max     = 1
 
 # ---- App (AI) ASG ----
 ai_instance_type = "t3.small"
 ai_asg_min       = 1
 ai_asg_desired   = 1
-ai_asg_max       = 2
+ai_asg_max       = 1
 
 # ---- RDS ----
 db_engine_version        = "8.0.45"
