@@ -167,7 +167,7 @@ resource "aws_autoscaling_group" "web" {
 
   launch_template {
     id      = aws_launch_template.web.id
-    version = "$Latest"
+    version = aws_launch_template.web.latest_version
   }
 
   instance_refresh {
@@ -225,7 +225,7 @@ resource "aws_autoscaling_group" "app_spring" {
 
   launch_template {
     id      = aws_launch_template.app_spring.id
-    version = "$Latest"
+    version = aws_launch_template.app_spring.latest_version
   }
 
   instance_refresh {
@@ -273,7 +273,7 @@ resource "aws_autoscaling_group" "app_ai" {
 
   launch_template {
     id      = aws_launch_template.app_ai.id
-    version = "$Latest"
+    version = aws_launch_template.app_ai.latest_version
   }
 
   instance_refresh {
