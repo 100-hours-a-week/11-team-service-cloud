@@ -7,6 +7,9 @@ project_name = "scuad"
 vpc_cidr = "10.2.0.0/16"
 azs      = ["ap-northeast-2a", "ap-northeast-2c"]
 
+# Custom AMI (leave commented to use Ubuntu 24.04)
+# ami_id = "ami-xxxxxxxxxxxxxxxxx"
+
 ssm_human_role_names = ["role-name-1", "role-name-2"]
 
 web_instance_type = "t3.small"

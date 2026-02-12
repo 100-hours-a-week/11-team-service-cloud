@@ -33,6 +33,13 @@ variable "ssm_human_role_names" {
   default = []
 }
 
+# ---- AMI ----
+variable "ami_id" {
+  description = "Custom AMI id to use for all instances. If null, use Ubuntu 24.04 SSM AMI."
+  type        = string
+  default     = null
+}
+
 # ---- ASG sizing ----
 variable "web_instance_type" {
   type    = string

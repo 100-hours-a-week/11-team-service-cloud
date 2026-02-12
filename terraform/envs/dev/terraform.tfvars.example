@@ -9,6 +9,9 @@ project_name = "scuad"
 vpc_cidr = "10.1.0.0/16"
 azs      = ["ap-northeast-2a", "ap-northeast-2c"]
 
+# Custom AMI (leave commented to use Ubuntu 24.04)
+# ami_id = "ami-xxxxxxxxxxxxxxxxx"
+
 # Optional: buckets for deployment artifacts
 # deployment_buckets = ["bucket-name"]
 

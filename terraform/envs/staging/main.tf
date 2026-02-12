@@ -68,6 +68,10 @@ data "aws_ssm_parameter" "ubuntu_2404_ami" {
   name = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
 }
 
+locals {
+  ami_id = var.ami_id != null ? var.ami_id : data.aws_ssm_parameter.ubuntu_2404_ami.value
+}
+
 resource "aws_lb" "public" {
   name               = "${local.name_prefix}-alb"
   internal           = false
@@ -100,7 +104,7 @@ resource "aws_lb_listener" "http" {
 
 resource "aws_launch_template" "web" {
   name_prefix   = "${local.name_prefix}-web-"
-  image_id      = data.aws_ssm_parameter.ubuntu_2404_ami.value
+  image_id      = local.ami_id
   instance_type = var.web_instance_type
 
   vpc_security_group_ids = [module.network.web_security_group_id]
@@ -130,7 +134,7 @@ resource "aws_autoscaling_group" "web" {
 
 resource "aws_launch_template" "app_spring" {
   name_prefix   = "${local.name_prefix}-app-spring-"
-  image_id      = data.aws_ssm_parameter.ubuntu_2404_ami.value
+  image_id      = local.ami_id
   instance_type = var.app_instance_type
 
   vpc_security_group_ids = [module.network.app_spring_security_group_id]
@@ -156,7 +160,7 @@ resource "aws_autoscaling_group" "app_spring" {
 
 resource "aws_launch_template" "app_ai" {
   name_prefix   = "${local.name_prefix}-app-ai-"
-  image_id      = data.aws_ssm_parameter.ubuntu_2404_ami.value
+  image_id      = local.ami_id
   instance_type = var.ai_instance_type
 
   vpc_security_group_ids = [module.network.app_ai_security_group_id]
