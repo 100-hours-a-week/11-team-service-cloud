@@ -136,6 +136,16 @@ resource "aws_autoscaling_group" "web" {
     version = "$Latest"
   }
 
+  instance_refresh {
+    strategy = "Rolling"
+    triggers = ["launch_template"]
+
+    preferences {
+      min_healthy_percentage = 0
+      instance_warmup        = 60
+    }
+  }
+
   target_group_arns = [aws_lb_target_group.web.arn]
 }
 
@@ -162,6 +172,16 @@ resource "aws_autoscaling_group" "app_spring" {
     id      = aws_launch_template.app_spring.id
     version = "$Latest"
   }
+
+  instance_refresh {
+    strategy = "Rolling"
+    triggers = ["launch_template"]
+
+    preferences {
+      min_healthy_percentage = 0
+      instance_warmup        = 60
+    }
+  }
 }
 
 resource "aws_launch_template" "app_ai" {
@@ -186,6 +206,16 @@ resource "aws_autoscaling_group" "app_ai" {
   launch_template {
     id      = aws_launch_template.app_ai.id
     version = "$Latest"
+  }
+
+  instance_refresh {
+    strategy = "Rolling"
+    triggers = ["launch_template"]
+
+    preferences {
+      min_healthy_percentage = 0
+      instance_warmup        = 60
+    }
   }
 }
 
