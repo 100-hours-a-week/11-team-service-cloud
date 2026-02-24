@@ -81,7 +81,7 @@ resource "aws_security_group_rule" "rds_mysql_from_v1" {
 
 # (Optional) If the V1 EC2(MySQL) security group has restricted egress,
 # allow it to initiate connections to V2 RDS.
-resource "aws_security_group_rule" "v1_egress_to_v2_mysql" {
+resource "aws_security_group_rule" "v1_ingress_to_v2_mysql" {
   count = var.v1_mysql_security_group_id == null ? 0 : 1
 
   type              = "ingress"
