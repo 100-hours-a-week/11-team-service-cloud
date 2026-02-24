@@ -36,9 +36,10 @@ case "$TEST_TYPE" in
   job-analysis) K6_SCRIPT="$SCRIPTS_DIR/job-analysis.js";;
   application-eval) K6_SCRIPT="$SCRIPTS_DIR/application-eval.js";;
   chat) K6_SCRIPT="$SCRIPTS_DIR/chat-load.js";;
+  migration) K6_SCRIPT="$SCRIPTS_DIR/migration-traffic.js";;
   *)
     echo "Unknown test-type: $TEST_TYPE" >&2
-    echo "Supported: quick | job-analysis | application-eval | chat" >&2
+    echo "Supported: quick | job-analysis | application-eval | chat | migration" >&2
     exit 1
     ;;
 esac
