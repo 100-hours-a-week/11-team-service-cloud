@@ -78,3 +78,19 @@ resource "aws_security_group_rule" "rds_mysql_from_v1" {
 
   description = "Allow MySQL from legacy(V1) VPC for migration"
 }
+
+# (Optional) If the V1 EC2(MySQL) security group has restricted egress,
+# allow it to initiate connections to V2 RDS.
+resource "aws_security_group_rule" "v1_egress_to_v2_mysql" {
+  count = var.v1_mysql_security_group_id == null ? 0 : 1
+
+  type              = "ingress"
+  security_group_id = var.v1_mysql_security_group_id
+
+  from_port   = 3306
+  to_port     = 3306
+  protocol    = "tcp"
+  cidr_blocks = [var.vpc_cidr]
+
+  description = "Allow MySQL ingress to V2 VPC (RDS migration)"
+}
