@@ -128,3 +128,20 @@ variable "db_password" {
   type      = string
   sensitive = true
 }
+
+# ---- VPC Peering (V1 EC2 MySQL -> V2 RDS) ----
+variable "v1_vpc_id" {
+  description = "VPC id of the legacy(V1) EC2 MySQL environment"
+  type        = string
+}
+
+variable "v1_vpc_cidr" {
+  description = "CIDR block of the legacy(V1) VPC (used for routing/SG ingress)"
+  type        = string
+}
+
+variable "v1_mysql_security_group_id" {
+  description = "(Optional) Security group id attached to the legacy(V1) EC2 MySQL instance. If set, we add an egress rule to reach V2 RDS(3306)."
+  type        = string
+  default     = null
+}
