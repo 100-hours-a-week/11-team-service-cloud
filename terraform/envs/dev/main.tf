@@ -133,15 +133,21 @@ resource "aws_launch_template" "web" {
 
   user_data = base64encode(<<-EOF
     #!/bin/bash
-    set -e
+    set -euxo pipefail
+    exec > >(tee -a /var/log/user-data.log) 2>&1
 
-    # Assumes Docker is already installed in the custom AMI.
-    sudo systemctl enable --now docker || true
+    systemctl enable --now docker
 
-    # Run a simple nginx container to satisfy ALB health checks.
-    # Host port 3000 -> container port 80
-    sudo docker rm -f web-nginx || true
-    sudo docker run -d --restart=always --name web-nginx -p 3000:80 nginx:stable
+    timeout 60 bash -c 'until docker info >/dev/null 2>&1; do echo "Waiting for docker..."; sleep 1; done'
+
+    aws ecr get-login-password --region ap-northeast-2 | \
+      docker login --username AWS --password-stdin 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com
+
+    docker pull 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend:dev-0.0.0
+
+    docker rm -f scuad-frontend || true
+    docker run -d --restart unless-stopped --name scuad-frontend -p 3000:3000 \
+      209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend:dev-0.0.0
   EOF
   )
 
@@ -250,7 +256,29 @@ resource "aws_launch_template" "app_ai" {
     name = module.iam.iam_instance_profile_name
   }
 
-  user_data = base64encode("#!/bin/bash\nset -e\n# ai bootstrap here\n")
+  user_data = base64encode(<<-EOF
+    #!/bin/bash
+    set -euxo pipefail
+    exec > >(tee -a /var/log/user-data.log) 2>&1
+
+    systemctl enable --now docker
+
+    timeout 60 bash -c 'until docker info >/dev/null 2>&1; do echo "Waiting for docker..."; sleep 1; done'
+
+    aws ecr get-login-password --region ap-northeast-2 | \
+      docker login --username AWS --password-stdin 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com
+
+    docker pull 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai:dev-0.1.0
+
+    # Parameter Store에서 .env 가져오기
+    aws ssm get-parameter --name "/ai/env/DEV_DOT_ENV" --with-decryption --query "Parameter.Value" --output text --region ap-northeast-2 > /home/ubuntu/.env
+
+    docker rm -f scuad-ai || true
+    docker run -d --restart unless-stopped --name scuad-ai -p 8000:8000 \
+      --env-file /home/ubuntu/.env \
+      209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai:dev-0.1.0
+  EOF
+  )
 
   tag_specifications {
     resource_type = "instance"
