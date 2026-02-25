@@ -2,6 +2,12 @@
 region = "ap-northeast-2"
 project_name = "scuad"
 
-ecr_repository_name = "scuad-registry"
-# Keep last N tagged images
+# Create one ECR repository per name
+ecr_repository_names = [
+  "scuad-registry",
+  # "scuad-backend",
+  # "scuad-web",
+]
+
+# Keep last N tagged images (null disables lifecycle policy)
 # ecr_lifecycle_keep_last = 50
