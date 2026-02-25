@@ -21,6 +21,23 @@ resource "aws_security_group" "alb" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Internal-only listener ports (reachable only from within the VPC).
+  ingress {
+    description = "Spring HTTP (internal)"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  ingress {
+    description = "AI HTTP (internal)"
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -79,7 +96,16 @@ resource "aws_security_group" "app_spring" {
   description = "Spring app instances security group"
   vpc_id      = aws_vpc.this.id
 
-  # Allow web -> spring (8080)
+  # Allow ALB -> spring (8080)
+  ingress {
+    description     = "8080 from ALB"
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  # Optional: keep direct web -> spring access if you still need it.
   ingress {
     description     = "8080 from web"
     from_port       = 8080
@@ -118,7 +144,16 @@ resource "aws_security_group" "app_ai" {
   description = "AI app instances security group"
   vpc_id      = aws_vpc.this.id
 
-  # Allow spring -> ai (8000)
+  # Allow ALB -> ai (8000)
+  ingress {
+    description     = "8000 from ALB"
+    from_port       = 8000
+    to_port         = 8000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  # Keep spring -> ai (8000) if the spring service calls AI directly.
   ingress {
     description     = "8000 from spring"
     from_port       = 8000

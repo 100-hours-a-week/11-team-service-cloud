@@ -106,6 +106,40 @@ resource "aws_lb_target_group" "web" {
   }
 }
 
+resource "aws_lb_target_group" "app_spring" {
+  name     = "${local.name_prefix}-app-spring-tg"
+  port     = 8080
+  protocol = "HTTP"
+  vpc_id   = module.network.vpc_id
+
+  health_check {
+    path                = "/"
+    protocol            = "HTTP"
+    matcher             = "200-399"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 5
+  }
+}
+
+resource "aws_lb_target_group" "app_ai" {
+  name     = "${local.name_prefix}-app-ai-tg"
+  port     = 8000
+  protocol = "HTTP"
+  vpc_id   = module.network.vpc_id
+
+  health_check {
+    path                = "/"
+    protocol            = "HTTP"
+    matcher             = "200-399"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 5
+  }
+}
+
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.public.arn
   port              = 80
@@ -114,6 +148,29 @@ resource "aws_lb_listener" "http" {
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.web.arn
+  }
+}
+
+# Internal-only listeners (allowed from within VPC only via the ALB security group)
+resource "aws_lb_listener" "spring" {
+  load_balancer_arn = aws_lb.public.arn
+  port              = 8080
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app_spring.arn
+  }
+}
+
+resource "aws_lb_listener" "ai" {
+  load_balancer_arn = aws_lb.public.arn
+  port              = 8000
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app_ai.arn
   }
 }
 
@@ -229,10 +286,14 @@ resource "aws_autoscaling_group" "app_spring" {
   desired_capacity = var.app_spring_asg_desired
   max_size         = var.app_spring_asg_max
 
+  health_check_type = "ELB"
+
   launch_template {
     id      = aws_launch_template.app_spring.id
     version = aws_launch_template.app_spring.latest_version
   }
+
+  target_group_arns = [aws_lb_target_group.app_spring.arn]
 
   instance_refresh {
     strategy = "Rolling"
@@ -299,10 +360,14 @@ resource "aws_autoscaling_group" "app_ai" {
   desired_capacity = var.ai_asg_desired
   max_size         = var.ai_asg_max
 
+  health_check_type = "ELB"
+
   launch_template {
     id      = aws_launch_template.app_ai.id
     version = aws_launch_template.app_ai.latest_version
   }
+
+  target_group_arns = [aws_lb_target_group.app_ai.arn]
 
   instance_refresh {
     strategy = "Rolling"
