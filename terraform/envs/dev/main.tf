@@ -151,10 +151,24 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# Internal-only listeners (allowed from within VPC only via the ALB security group)
-resource "aws_lb_listener" "spring" {
-  load_balancer_arn = aws_lb.public.arn
-  port              = 8080
+# -------------------------
+# Internal ALB (private service-to-service)
+# -------------------------
+resource "aws_lb" "internal" {
+  name               = "${local.name_prefix}-internal-alb"
+  internal           = true
+  load_balancer_type = "application"
+  security_groups    = [module.network.internal_alb_security_group_id]
+  subnets            = module.network.app_private_subnet_ids
+
+  tags = {
+    Environment = local.environment
+  }
+}
+
+resource "aws_lb_listener" "internal_http" {
+  load_balancer_arn = aws_lb.internal.arn
+  port              = 80
   protocol          = "HTTP"
 
   default_action {
@@ -163,14 +177,37 @@ resource "aws_lb_listener" "spring" {
   }
 }
 
-resource "aws_lb_listener" "ai" {
-  load_balancer_arn = aws_lb.public.arn
-  port              = 8000
-  protocol          = "HTTP"
+# Route /ai/* to AI target group
+resource "aws_lb_listener_rule" "internal_ai" {
+  listener_arn = aws_lb_listener.internal_http.arn
+  priority     = 10
 
-  default_action {
+  action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.app_ai.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/ai/*"]
+    }
+  }
+}
+
+# Route /api/* to Spring target group
+resource "aws_lb_listener_rule" "internal_spring" {
+  listener_arn = aws_lb_listener.internal_http.arn
+  priority     = 20
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app_spring.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/*"]
+    }
   }
 }
 
@@ -382,6 +419,11 @@ resource "aws_autoscaling_group" "app_ai" {
 
 output "alb_dns_name" {
   value = aws_lb.public.dns_name
+}
+
+output "internal_alb_dns_name" {
+  value       = aws_lb.internal.dns_name
+  description = "Internal ALB DNS name for service-to-service calls (VPC only)"
 }
 
 output "rds_endpoint" {

@@ -78,7 +78,12 @@ output "db_private_subnet_b_id" {
 
 output "alb_security_group_id" {
   value       = aws_security_group.alb.id
-  description = "ALB security group ID"
+  description = "Public (internet-facing) ALB security group ID"
+}
+
+output "internal_alb_security_group_id" {
+  value       = aws_security_group.internal_alb.id
+  description = "Internal ALB security group ID"
 }
 
 output "web_security_group_id" {
