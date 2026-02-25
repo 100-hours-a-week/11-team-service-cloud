@@ -113,7 +113,7 @@ resource "aws_lb_target_group" "app_spring" {
   vpc_id   = module.network.vpc_id
 
   health_check {
-    path                = "/"
+    path                = "/api/health"
     protocol            = "HTTP"
     matcher             = "200-399"
     interval            = 30
