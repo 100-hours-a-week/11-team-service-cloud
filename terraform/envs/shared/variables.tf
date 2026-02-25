@@ -8,9 +8,16 @@ variable "project_name" {
   default = "scuad"
 }
 
+# Backward-compat (single repo). Prefer ecr_repository_names.
 variable "ecr_repository_name" {
   type    = string
-  default = "scuad-registry"
+  default = null
+}
+
+# Create one ECR repository per name.
+variable "ecr_repository_names" {
+  type    = list(string)
+  default = []
 }
 
 variable "ecr_lifecycle_keep_last" {
