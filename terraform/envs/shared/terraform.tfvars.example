@@ -11,3 +11,8 @@ ecr_repository_names = [
 
 # Keep last N tagged images (null disables lifecycle policy)
 # ecr_lifecycle_keep_last = 50
+
+# S3 bucket for shared config/artifacts
+# NOTE: S3 bucket name은 전 세계에서 유일해야 함. (회사/계정/프로젝트 suffix 추천)
+# underscore(_)는 S3 규칙상 불가.
+s3_config_bucket_name = "scuad-dev-config"

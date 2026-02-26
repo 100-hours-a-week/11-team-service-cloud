@@ -43,6 +43,23 @@ module "ecr" {
   }
 }
 
+# S3 bucket for shared config/artifacts
+# NOTE: S3 bucket name 규칙상 underscore(_)는 사용할 수 없어서 하이픈(-)을 써야 함.
+module "scuad_dev_config" {
+  source = "../../modules/s3"
+
+  bucket_name       = var.s3_config_bucket_name
+  enable_versioning = var.s3_config_enable_versioning
+  force_destroy     = var.s3_config_force_destroy
+
+  sse_algorithm = var.s3_config_sse_algorithm
+  kms_key_id    = var.s3_config_kms_key_id
+
+  # Network stack과 결합할 때만 켜는 걸 추천 (shared는 보통 network를 안 만드니까 기본 false)
+  restrict_to_vpce = var.s3_config_restrict_to_vpce
+  vpce_id          = var.s3_config_vpce_id
+}
+
 # Backward-compat: if exactly one repo is configured, expose its URL.
 output "ecr_repository_url" {
   description = "(Legacy) URL of the single ECR repository when exactly one is configured; otherwise null."
@@ -52,4 +69,14 @@ output "ecr_repository_url" {
 output "ecr_repository_urls" {
   description = "Map of ECR repository name -> repository URL"
   value       = { for name, m in module.ecr : name => m.repository_url }
+}
+
+output "s3_config_bucket_name" {
+  description = "S3 bucket name for shared config/artifacts"
+  value       = module.scuad_dev_config.bucket_name
+}
+
+output "s3_config_bucket_arn" {
+  description = "S3 bucket ARN for shared config/artifacts"
+  value       = module.scuad_dev_config.bucket_arn
 }
