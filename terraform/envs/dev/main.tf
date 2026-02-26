@@ -303,6 +303,92 @@ resource "aws_lb_listener_rule" "internal_spring" {
 }
 
 # -------------------------
+# Egress Proxy (public subnet)
+# -------------------------
+resource "aws_security_group" "egress_proxy" {
+  count = var.enable_egress_proxy ? 1 : 0
+
+  name        = "${local.name_prefix}-egress-proxy-sg"
+  description = "Forward proxy in public subnet for private instances"
+  vpc_id      = module.network.vpc_id
+
+  ingress {
+    description = "Proxy from VPC"
+    from_port   = var.egress_proxy_port
+    to_port     = var.egress_proxy_port
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${local.name_prefix}-egress-proxy-sg"
+    Environment = local.environment
+  }
+}
+
+resource "aws_instance" "egress_proxy" {
+  count = var.enable_egress_proxy ? 1 : 0
+
+  ami                    = local.ami_id
+  instance_type          = var.egress_proxy_instance_type
+  subnet_id              = module.network.public_subnet_ids[0]
+  vpc_security_group_ids = [aws_security_group.egress_proxy[0].id]
+
+  associate_public_ip_address = true
+
+  iam_instance_profile = module.iam.iam_instance_profile_name
+
+  user_data = <<-EOF
+    #!/bin/bash
+    set -euxo pipefail
+    exec > >(tee -a /var/log/user-data.log) 2>&1
+
+    export DEBIAN_FRONTEND=noninteractive
+
+    apt-get update
+    apt-get install -y squid
+
+    # Allow proxying only from VPC CIDR
+    cat >/etc/squid/conf.d/openclaw-egress.conf <<CONF
+    http_port ${var.egress_proxy_port}
+
+    acl allowed_vpc src ${var.vpc_cidr}
+    http_access allow allowed_vpc
+
+    http_access deny all
+
+    # Basic hardening
+    forwarded_for delete
+    via off
+    CONF
+
+    systemctl enable --now squid
+  EOF
+
+  tags = {
+    Name        = "${local.name_prefix}-egress-proxy"
+    Environment = local.environment
+  }
+}
+
+output "egress_proxy_public_ip" {
+  value       = try(aws_instance.egress_proxy[0].public_ip, null)
+  description = "Public IP of the egress proxy instance (if enabled)"
+}
+
+output "egress_proxy_private_ip" {
+  value       = try(aws_instance.egress_proxy[0].private_ip, null)
+  description = "Private IP of the egress proxy instance (if enabled)"
+}
+
+# -------------------------
 # Launch templates + ASGs
 # -------------------------
 resource "aws_launch_template" "web" {
