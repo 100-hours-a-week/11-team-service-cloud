@@ -169,6 +169,40 @@ resource "aws_lb_listener_rule" "public_api" {
   }
 }
 
+# HTTPS listener (optional; created only when alb_certificate_arn is set)
+resource "aws_lb_listener" "https" {
+  count = var.alb_certificate_arn == null ? 0 : 1
+
+  load_balancer_arn = aws_lb.public.arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = var.alb_certificate_arn
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.web.arn
+  }
+}
+
+# - /api/* -> Spring (HTTPS)
+resource "aws_lb_listener_rule" "public_api_https" {
+  
+  listener_arn = aws_lb_listener.https[0].arn
+  priority     = 10
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app_spring.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/*"]
+    }
+  }
+}
+
 # -------------------------
 # Internal ALB (private service-to-service)
 # -------------------------

@@ -21,6 +21,9 @@ azs      = ["ap-northeast-2a", "ap-northeast-2c"]
 # Human roles who can use SSM Session Manager / RunCommand
 ssm_human_role_names = ["role-name-1", "role-name-2"]
 
+# Public ALB HTTPS (ACM certificate ARN)
+alb_certificate_arn = "arn:aws:acm:region:xxxxxxxxxxxxxxxxxxxxxxxxxx"
+
 # ---- Web ASG ----
 web_instance_type = "t3.small"
 web_asg_min       = 1

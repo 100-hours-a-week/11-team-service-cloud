@@ -23,6 +23,13 @@ variable "deployment_buckets" {
   default = []
 }
 
+# ---- ALB HTTPS ----
+variable "alb_certificate_arn" {
+  description = "ACM certificate ARN for the public (internet-facing) ALB HTTPS listener. If null, HTTPS listener is not created."
+  type        = string
+  default     = null
+}
+
 variable "allowed_ssh_cidrs" {
   type    = list(string)
   default = []
