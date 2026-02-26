@@ -145,15 +145,34 @@ resource "aws_lb_listener" "http" {
   port              = 80
   protocol          = "HTTP"
 
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.web.arn
+  # If HTTPS is configured, force HTTPS for all internet traffic.
+  # Otherwise, keep serving HTTP (useful before ACM cert is ready).
+  dynamic "default_action" {
+    for_each = var.alb_certificate_arn == null ? [1] : []
+    content {
+      type             = "forward"
+      target_group_arn = aws_lb_target_group.web.arn
+    }
+  }
+
+  dynamic "default_action" {
+    for_each = var.alb_certificate_arn == null ? [] : [1]
+    content {
+      type = "redirect"
+
+      redirect {
+        port        = "443"
+        protocol    = "HTTPS"
+        status_code = "HTTP_301"
+      }
+    }
   }
 }
 
-# Public ALB routing
-# - /api/* -> Spring
-resource "aws_lb_listener_rule" "public_api" {
+# - /api/* -> Spring (HTTP only; disabled once HTTPS redirect is enabled)
+resource "aws_lb_listener_rule" "public_api_http" {
+  count = var.alb_certificate_arn == null ? 1 : 0
+
   listener_arn = aws_lb_listener.http.arn
   priority     = 10
 
@@ -187,7 +206,8 @@ resource "aws_lb_listener" "https" {
 
 # - /api/* -> Spring (HTTPS)
 resource "aws_lb_listener_rule" "public_api_https" {
-  
+  count = var.alb_certificate_arn == null ? 0 : 1
+
   listener_arn = aws_lb_listener.https[0].arn
   priority     = 10
 
