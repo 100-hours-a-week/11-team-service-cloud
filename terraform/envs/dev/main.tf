@@ -106,8 +106,27 @@ resource "aws_lb_target_group" "web" {
   }
 }
 
-resource "aws_lb_target_group" "app_spring" {
-  name     = "${local.name_prefix}-app-spring-tg"
+# NOTE: A target group can only be associated with *one* load balancer.
+# We use separate target groups for public ALB and internal ALB.
+resource "aws_lb_target_group" "app_spring_internal" {
+  name     = "${local.name_prefix}-app-spring-int-tg"
+  port     = 8080
+  protocol = "HTTP"
+  vpc_id   = module.network.vpc_id
+
+  health_check {
+    path                = "/api/health"
+    protocol            = "HTTP"
+    matcher             = "200-399"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 5
+  }
+}
+
+resource "aws_lb_target_group" "app_spring_public" {
+  name     = "${local.name_prefix}-app-spring-pub-tg"
   port     = 8080
   protocol = "HTTP"
   vpc_id   = module.network.vpc_id
@@ -178,7 +197,7 @@ resource "aws_lb_listener_rule" "public_api_http" {
 
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.app_spring.arn
+    target_group_arn = aws_lb_target_group.app_spring_public.arn
   }
 
   condition {
@@ -213,7 +232,7 @@ resource "aws_lb_listener_rule" "public_api_https" {
 
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.app_spring.arn
+    target_group_arn = aws_lb_target_group.app_spring_public.arn
   }
 
   condition {
@@ -245,7 +264,7 @@ resource "aws_lb_listener" "internal_http" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.app_spring.arn
+    target_group_arn = aws_lb_target_group.app_spring_internal.arn
   }
 }
 
@@ -273,7 +292,7 @@ resource "aws_lb_listener_rule" "internal_spring" {
 
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.app_spring.arn
+    target_group_arn = aws_lb_target_group.app_spring_internal.arn
   }
 
   condition {
@@ -445,7 +464,10 @@ resource "aws_autoscaling_group" "app_spring" {
     version = aws_launch_template.app_spring.latest_version
   }
 
-  target_group_arns = [aws_lb_target_group.app_spring.arn]
+  target_group_arns = [
+    aws_lb_target_group.app_spring_internal.arn,
+    aws_lb_target_group.app_spring_public.arn,
+  ]
 
   instance_refresh {
     strategy = "Rolling"
