@@ -48,6 +48,12 @@ variable "egress_proxy_port" {
   default     = 3128
 }
 
+variable "egress_proxy_allowed_domains" {
+  description = "List of destination domains allowed through the proxy (Squid dstdomain). Example: ['.kakao.com', '.kakao.co.kr']"
+  type        = list(string)
+  default     = []
+}
+
 variable "allowed_ssh_cidrs" {
   type    = list(string)
   default = []

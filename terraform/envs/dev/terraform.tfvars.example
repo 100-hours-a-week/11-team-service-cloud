@@ -24,6 +24,18 @@ ssm_human_role_names = ["role-name-1", "role-name-2"]
 # Public ALB HTTPS (ACM certificate ARN)
 alb_certificate_arn = "arn:aws:acm:region:xxxxxxxxxxxxxxxxxxxxxxxxxx"
 
+# Egress proxy (public subnet) - enable if private instances must call external APIs (e.g., Kakao OAuth)
+enable_egress_proxy = true
+# egress_proxy_instance_type = "t3.micro"
+
+# Allow proxying only to Kakao domains
+# Squid matches subdomains when you prefix with a dot.
+egress_proxy_allowed_domains = [
+  ".kakao.com",
+  ".kakao.co.kr",
+  ".kakaocdn.net",
+]
+
 # ---- Web ASG ----
 web_instance_type = "t3.small"
 web_asg_min       = 1
