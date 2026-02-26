@@ -355,14 +355,16 @@ resource "aws_instance" "egress_proxy" {
     apt-get update
     apt-get install -y squid
 
-    # Allow proxying only from VPC CIDR AND only to allowed destination domains
-    cat >/etc/squid/conf.d/openclaw-egress.conf <<CONF
+    # Write a full squid.conf to avoid rule-order issues with distro defaults
+    # (default config may contain a blanket "http_access deny all" before conf.d includes)
+    cat >/etc/squid/squid.conf <<CONF
     http_port ${var.egress_proxy_port}
 
     # Client allowlist
     acl allowed_vpc src ${var.vpc_cidr}
 
     # Destination allowlist (domains)
+    # Leading dot matches the domain and all subdomains.
     acl allowed_domains dstdomain ${join(" ", var.egress_proxy_allowed_domains)}
 
     # Ports hardening
@@ -371,7 +373,7 @@ resource "aws_instance" "egress_proxy" {
     http_access deny !Safe_ports
     http_access deny CONNECT !SSL_ports
 
-    # Allow only VPC -> allowed domains
+    # Allow only VPC -> allowed domains (CONNECT included)
     http_access allow allowed_vpc allowed_domains
 
     # Deny everything else
@@ -380,9 +382,14 @@ resource "aws_instance" "egress_proxy" {
     # Basic hardening
     forwarded_for delete
     via off
+
+    # Logs
+    access_log /var/log/squid/access.log
+    cache_log /var/log/squid/cache.log
     CONF
 
     systemctl enable --now squid
+    systemctl restart squid
   EOF
 
   tags = {
