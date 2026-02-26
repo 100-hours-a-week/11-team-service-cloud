@@ -302,7 +302,50 @@ resource "aws_launch_template" "app_spring" {
     name = module.iam.iam_instance_profile_name
   }
 
-  user_data = base64encode("#!/bin/bash\nset -e\n# spring bootstrap here\n")
+  user_data = base64encode(<<-EOF
+    #!/bin/bash
+    set -euxo pipefail
+    exec > >(tee -a /var/log/user-data.log) 2>&1
+
+    REGION="ap-northeast-2"
+    APP_DIR="/opt/scuad"
+    COMPOSE_S3_URI="s3://scuad-dev-config/be/docker-compose.yml"
+    ENV_PARAM_NAME="/be/env/dev/DOT_ENV"
+    ECR_REGISTRY="209192769586.dkr.ecr.$REGION.amazonaws.com"
+
+    retry() {
+      local n=0
+      local max=10
+      local delay=3
+      until "$@"; do
+        n=$((n + 1))
+        if [ "$n" -ge "$max" ]; then
+          echo "Command failed after $${max} attempts: $*" >&2
+          return 1
+        fi
+        sleep "$delay"
+      done
+    }
+
+    systemctl enable --now docker
+    timeout 120 bash -c 'until docker info >/dev/null 2>&1; do echo "Waiting for docker..."; sleep 1; done'
+
+    mkdir -p "$APP_DIR"
+    cd "$APP_DIR"
+
+    retry aws s3 cp "$COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+
+    retry aws ssm get-parameter \
+      --name "$ENV_PARAM_NAME" --with-decryption \
+      --query "Parameter.Value" --output text --region "$REGION" > "$APP_DIR/.env"
+    chmod 600 "$APP_DIR/.env" || true
+
+    retry bash -lc "aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ECR_REGISTRY"
+
+    retry docker compose pull
+    docker compose up -d --remove-orphans
+  EOF
+  )
 
   tag_specifications {
     resource_type = "instance"
