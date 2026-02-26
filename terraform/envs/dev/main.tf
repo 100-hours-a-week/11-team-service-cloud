@@ -591,6 +591,17 @@ resource "aws_launch_template" "app_ai" {
   image_id      = local.ami_id
   instance_type = var.ai_instance_type
 
+  # Root volume size override (AMI default is not a hard limit)
+  block_device_mappings {
+    device_name = "/dev/sda1"
+
+    ebs {
+      volume_size           = 20
+      volume_type           = "gp3"
+      delete_on_termination = true
+    }
+  }
+
   vpc_security_group_ids = [module.network.app_ai_security_group_id]
 
   iam_instance_profile {
