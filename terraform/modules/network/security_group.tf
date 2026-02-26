@@ -120,6 +120,15 @@ resource "aws_security_group" "app_spring" {
     security_groups = [aws_security_group.internal_alb.id]
   }
 
+  # Allow public ALB -> spring (8080) for /api/* routing
+  ingress {
+    description     = "8080 from public ALB"
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
   # Optional: keep direct web -> spring access if you still need it.
   ingress {
     description     = "8080 from web"

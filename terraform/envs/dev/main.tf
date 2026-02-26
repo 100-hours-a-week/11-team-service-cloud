@@ -151,6 +151,24 @@ resource "aws_lb_listener" "http" {
   }
 }
 
+# Public ALB routing
+# - /api/* -> Spring
+resource "aws_lb_listener_rule" "public_api" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 10
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app_spring.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/*"]
+    }
+  }
+}
+
 # -------------------------
 # Internal ALB (private service-to-service)
 # -------------------------
@@ -332,7 +350,7 @@ resource "aws_launch_template" "app_spring" {
 
     mkdir -p "$APP_DIR"
     cd "$APP_DIR"
-
+    
     retry aws s3 cp "$COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
 
     retry aws ssm get-parameter \
