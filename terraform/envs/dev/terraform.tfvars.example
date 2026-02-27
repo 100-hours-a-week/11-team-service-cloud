@@ -1,0 +1,65 @@
+# Example tfvars for dev
+# Copy to terraform.tfvars and adjust values.
+
+# ---- Common ----
+region       = "ap-northeast-2"
+project_name = "scuad"
+
+# VPC
+vpc_cidr = "10.1.0.0/16"
+azs      = ["ap-northeast-2a", "ap-northeast-2c"]
+
+# Custom AMI (leave commented to use Ubuntu 24.04)
+# ami_id = "ami-xxxxxxxxxxxxxxxxx"
+
+# Optional: buckets for deployment artifacts
+# deployment_buckets = ["bucket-name"]
+
+# Optional: SSH allowed CIDRs (prefer SSM; keep empty to disable SSH)
+# allowed_ssh_cidrs = ["x.x.x.x/32"]
+
+# Human roles who can use SSM Session Manager / RunCommand
+ssm_human_role_names = ["role-name-1", "role-name-2"]
+
+# Public ALB HTTPS (ACM certificate ARN)
+alb_certificate_arn = "arn:aws:acm:region:xxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# Egress proxy (public subnet) - enable if private instances must call external APIs (e.g., Kakao OAuth)
+enable_egress_proxy = true
+# egress_proxy_instance_type = "t3.micro"
+
+# Allow proxying only to Kakao domains
+# Squid matches subdomains when you prefix with a dot.
+egress_proxy_allowed_domains = [
+  ".kakao.com",
+  ".kakao.co.kr",
+  ".kakaocdn.net",
+]
+
+# ---- Web ASG ----
+web_instance_type = "t3.small"
+web_asg_min       = 1
+web_asg_desired   = 1
+web_asg_max       = 1
+
+# ---- App (Spring) ASG ----
+app_instance_type      = "t3.small"
+app_spring_asg_min     = 1
+app_spring_asg_desired = 1
+app_spring_asg_max     = 1
+
+# ---- App (AI) ASG ----
+ai_instance_type = "t3.small"
+ai_asg_min       = 1
+ai_asg_desired   = 1
+ai_asg_max       = 1
+
+# ---- RDS ----
+db_engine_version        = "8.0.45"
+db_instance_class        = "db.t4g.small"
+db_allocated_storage_gb  = 20
+# db_name = "db-name"
+db_username              = "db-username"
+
+# db_password is required and should be provided via env var:
+#   export TF_VAR_db_password='...'

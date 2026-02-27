@@ -1,0 +1,37 @@
+# Example tfvars for prod
+# Copy to terraform.tfvars and adjust values.
+
+region       = "ap-northeast-2"
+project_name = "scuad"
+
+vpc_cidr = "10.3.0.0/16"
+azs      = ["ap-northeast-2a", "ap-northeast-2c"]
+
+# Custom AMI (leave commented to use Ubuntu 24.04)
+# ami_id = "ami-xxxxxxxxxxxxxxxxx"
+
+ssm_human_role_names = ["role-name-1", "role-name-2"]
+
+web_instance_type = "t3.small"
+web_asg_min       = 2
+web_asg_desired   = 2
+web_asg_max       = 10
+
+app_instance_type      = "t3.small"
+app_spring_asg_min     = 2
+app_spring_asg_desired = 2
+app_spring_asg_max     = 10
+
+ai_instance_type = "t3.small"
+ai_asg_min       = 2
+ai_asg_desired   = 2
+ai_asg_max       = 10
+
+# RDS (prod is Multi-AZ + deletion protection in our defaults)
+db_engine_version        = "8.0.45"
+db_instance_class        = "db.t4g.medium"
+db_allocated_storage_gb  = 50
+# db_name = "db-name"
+db_username              = "db-username"
+
+# export TF_VAR_db_password='...'
