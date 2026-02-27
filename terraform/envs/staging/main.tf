@@ -182,6 +182,98 @@ resource "aws_lb_listener" "http" {
   }
 }
 
+# -------------------------
+# Internal ALB (private service-to-service)
+# -------------------------
+resource "aws_lb" "internal" {
+  name               = "${local.name_prefix}-internal-alb"
+  internal           = true
+  load_balancer_type = "application"
+  security_groups    = [module.network.internal_alb_security_group_id]
+  subnets            = module.network.app_private_subnet_ids
+
+  tags = {
+    Environment = local.environment
+  }
+}
+
+resource "aws_lb_target_group" "app_spring_internal" {
+  name     = "${local.name_prefix}-app-spring-int-tg"
+  port     = 8080
+  protocol = "HTTP"
+  vpc_id   = module.network.vpc_id
+
+  health_check {
+    path                = "/api/health"
+    protocol            = "HTTP"
+    matcher             = "200-399"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 5
+  }
+}
+
+resource "aws_lb_target_group" "app_ai_internal" {
+  name     = "${local.name_prefix}-app-ai-int-tg"
+  port     = 8000
+  protocol = "HTTP"
+  vpc_id   = module.network.vpc_id
+
+  health_check {
+    path                = "/"
+    protocol            = "HTTP"
+    matcher             = "200-399"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 5
+  }
+}
+
+resource "aws_lb_listener" "internal_http" {
+  load_balancer_arn = aws_lb.internal.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app_spring_internal.arn
+  }
+}
+
+resource "aws_lb_listener_rule" "internal_ai" {
+  listener_arn = aws_lb_listener.internal_http.arn
+  priority     = 10
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app_ai_internal.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/ai/*"]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "internal_spring" {
+  listener_arn = aws_lb_listener.internal_http.arn
+  priority     = 20
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app_spring_internal.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/*"]
+    }
+  }
+}
+
 resource "aws_launch_template" "web" {
   name_prefix   = "${local.name_prefix}-web-"
   image_id      = local.ami_id
@@ -249,6 +341,8 @@ resource "aws_autoscaling_group" "app_spring" {
   desired_capacity = var.app_spring_asg_desired
   max_size         = var.app_spring_asg_max
 
+  health_check_type = "ELB"
+
   launch_template {
     id      = aws_launch_template.app_spring.id
     version = aws_launch_template.app_spring.latest_version
@@ -263,6 +357,8 @@ resource "aws_autoscaling_group" "app_spring" {
       instance_warmup        = 60
     }
   }
+
+  target_group_arns = [aws_lb_target_group.app_spring_internal.arn]
 }
 
 resource "aws_launch_template" "app_ai" {
@@ -285,6 +381,8 @@ resource "aws_autoscaling_group" "app_ai" {
   desired_capacity = var.ai_asg_desired
   max_size         = var.ai_asg_max
 
+  health_check_type = "ELB"
+
   launch_template {
     id      = aws_launch_template.app_ai.id
     version = aws_launch_template.app_ai.latest_version
@@ -299,6 +397,8 @@ resource "aws_autoscaling_group" "app_ai" {
       instance_warmup        = 60
     }
   }
+
+  target_group_arns = [aws_lb_target_group.app_ai_internal.arn]
 }
 
 output "alb_dns_name" { value = aws_lb.public.dns_name }
