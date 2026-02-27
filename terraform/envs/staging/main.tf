@@ -19,9 +19,12 @@ locals {
 module "iam" {
   source = "../../modules/iam"
 
-  name_prefix          = local.name_prefix
-  deployment_buckets   = var.deployment_buckets
-  ssm_parameter_prefix = "/${var.project_name}/${local.environment}/"
+  name_prefix        = local.name_prefix
+  deployment_buckets = var.deployment_buckets
+
+  # Parameter Store path prefix that EC2 instances are allowed to read.
+  # We keep this environment-scoped so user_data can read the .env securely.
+  ssm_parameter_prefix = "/${local.environment}/"
 }
 
 module "network" {
@@ -72,6 +75,18 @@ module "scuad_staging_config" {
   bucket_name = "scuad-staging-config"
 
   # Defaults (documented for clarity)
+  enable_versioning   = true
+  force_destroy       = false
+  sse_algorithm       = "AES256"
+  block_public_access = true
+}
+
+# S3 bucket for staging app data (uploads, etc.)
+module "scuad_staging" {
+  source = "../../modules/s3"
+
+  bucket_name = "scuad-staging"
+
   enable_versioning   = true
   force_destroy       = false
   sse_algorithm       = "AES256"
@@ -241,4 +256,9 @@ output "rds_endpoint" { value = module.rds.endpoint }
 output "s3_config_bucket_name" {
   description = "S3 bucket name for staging config/artifacts"
   value       = module.scuad_staging_config.bucket_name
+}
+
+output "s3_app_bucket_name" {
+  description = "S3 bucket name for staging app data"
+  value       = module.scuad_staging.bucket_name
 }
