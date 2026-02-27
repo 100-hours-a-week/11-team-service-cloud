@@ -93,6 +93,57 @@ module "scuad_staging" {
   block_public_access = true
 }
 
+# SSM Parameter for backend (.env)
+# NOTE: We intentionally ignore value changes so you can update it safely in the AWS Console
+# without Terraform overwriting it on the next apply.
+resource "aws_ssm_parameter" "staging_be_dot_env" {
+  name        = "/staging/be/DOT_ENV"
+  description = "scuad staging backend .env"
+  type        = "SecureString"
+  value       = "__SET_IN_CONSOLE__"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+
+  tags = {
+    Environment = local.environment
+    Project     = var.project_name
+  }
+}
+
+resource "aws_ssm_parameter" "staging_fe_dot_env" {
+  name        = "/staging/fe/DOT_ENV"
+  description = "scuad staging frontend .env"
+  type        = "SecureString"
+  value       = "__SET_IN_CONSOLE__"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+
+  tags = {
+    Environment = local.environment
+    Project     = var.project_name
+  }
+}
+
+resource "aws_ssm_parameter" "staging_ai_dot_env" {
+  name        = "/staging/ai/DOT_ENV"
+  description = "scuad staging ai .env"
+  type        = "SecureString"
+  value       = "__SET_IN_CONSOLE__"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+
+  tags = {
+    Environment = local.environment
+    Project     = var.project_name
+  }
+}
+
 data "aws_ssm_parameter" "ubuntu_2404_ami" {
   name = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
 }
