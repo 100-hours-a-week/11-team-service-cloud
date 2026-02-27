@@ -64,6 +64,20 @@ module "rds" {
   skip_final_snapshot     = true
 }
 
+# S3 bucket for staging config/artifacts (docker-compose, etc.)
+# NOTE: S3 bucket name 규칙상 underscore(_)는 사용할 수 없어서 하이픈(-)을 써야 함.
+module "scuad_staging_config" {
+  source = "../../modules/s3"
+
+  bucket_name = "scuad-staging-config"
+
+  # Defaults (documented for clarity)
+  enable_versioning   = true
+  force_destroy       = false
+  sse_algorithm       = "AES256"
+  block_public_access = true
+}
+
 data "aws_ssm_parameter" "ubuntu_2404_ami" {
   name = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
 }
@@ -223,3 +237,8 @@ resource "aws_autoscaling_group" "app_ai" {
 
 output "alb_dns_name" { value = aws_lb.public.dns_name }
 output "rds_endpoint" { value = module.rds.endpoint }
+
+output "s3_config_bucket_name" {
+  description = "S3 bucket name for staging config/artifacts"
+  value       = module.scuad_staging_config.bucket_name
+}
