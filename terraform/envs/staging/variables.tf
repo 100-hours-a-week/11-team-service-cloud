@@ -37,6 +37,30 @@ variable "s3_app_bucket_name" {
   default     = "scuad-staging"
 }
 
+# ---- Egress proxy (public subnet) ----
+variable "enable_egress_proxy" {
+  description = "Whether to create a public-subnet EC2 forward proxy for private instances' outbound internet access."
+  type        = bool
+  default     = false
+}
+
+variable "egress_proxy_instance_type" {
+  type    = string
+  default = "t3.micro"
+}
+
+variable "egress_proxy_port" {
+  description = "Proxy listen port (Squid default 3128)."
+  type        = number
+  default     = 3128
+}
+
+variable "egress_proxy_allowed_domains" {
+  description = "List of destination domains allowed through the proxy (Squid dstdomain). Example: ['.kakao.com', '.kakao.co.kr']"
+  type        = list(string)
+  default     = []
+}
+
 variable "allowed_ssh_cidrs" {
   type    = list(string)
   default = []

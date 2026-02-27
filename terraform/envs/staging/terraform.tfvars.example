@@ -14,6 +14,18 @@ s3_app_bucket_name    = "scuad-staging"
 
 deployment_buckets = ["scuad-staging-config", "scuad-staging"]
 
+# Egress proxy (public subnet) - enable if private instances must call external APIs (e.g., OAuth, OpenAI)
+enable_egress_proxy        = false
+egress_proxy_instance_type = "t3.micro"
+# egress_proxy_port = 3128
+
+# Allow proxying only to specific domains. Squid matches subdomains when you prefix with a dot.
+# egress_proxy_allowed_domains = [
+#   ".kakao.com",
+#   "api.openai.com",
+#   ".googleapis.com",
+# ]
+
 # Custom AMI (leave commented to use Ubuntu 24.04)
 # ami_id = "ami-xxxxxxxxxxxxxxxxx"
 

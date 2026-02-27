@@ -164,6 +164,111 @@ resource "aws_lb" "public" {
   }
 }
 
+# -------------------------
+# Egress Proxy (public subnet)
+# -------------------------
+resource "aws_security_group" "egress_proxy" {
+  count = var.enable_egress_proxy ? 1 : 0
+
+  name        = "${local.name_prefix}-egress-proxy-sg"
+  description = "Forward proxy in public subnet for private instances"
+  vpc_id      = module.network.vpc_id
+
+  ingress {
+    description = "Proxy from VPC"
+    from_port   = var.egress_proxy_port
+    to_port     = var.egress_proxy_port
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${local.name_prefix}-egress-proxy-sg"
+    Environment = local.environment
+  }
+}
+
+resource "aws_instance" "egress_proxy" {
+  count = var.enable_egress_proxy ? 1 : 0
+
+  ami                    = local.ami_id
+  instance_type          = var.egress_proxy_instance_type
+  subnet_id              = module.network.public_subnet_ids[0]
+  vpc_security_group_ids = [aws_security_group.egress_proxy[0].id]
+
+  associate_public_ip_address = true
+
+  iam_instance_profile = module.iam.iam_instance_profile_name
+
+  user_data = <<-EOF
+    #!/bin/bash
+    set -euxo pipefail
+    exec > >(tee -a /var/log/user-data.log) 2>&1
+
+    export DEBIAN_FRONTEND=noninteractive
+
+    apt-get update
+    apt-get install -y squid
+
+    # Write a full squid.conf to avoid rule-order issues with distro defaults
+    cat >/etc/squid/squid.conf <<CONF
+    http_port ${var.egress_proxy_port}
+
+    # Client allowlist
+    acl allowed_vpc src ${var.vpc_cidr}
+
+    # Destination allowlist (domains)
+    # Leading dot matches the domain and all subdomains.
+    acl allowed_domains dstdomain ${join(" ", var.egress_proxy_allowed_domains)}
+
+    # Ports hardening
+    acl SSL_ports port 443
+    acl Safe_ports port 80 443
+    http_access deny !Safe_ports
+    http_access deny CONNECT !SSL_ports
+
+    # Allow only VPC -> allowed domains (CONNECT included)
+    http_access allow allowed_vpc allowed_domains
+
+    # Deny everything else
+    http_access deny all
+
+    # Basic hardening
+    forwarded_for delete
+    via off
+
+    # Logs
+    access_log /var/log/squid/access.log
+    cache_log /var/log/squid/cache.log
+    CONF
+
+    systemctl enable --now squid
+    systemctl restart squid
+  EOF
+
+  tags = {
+    Name        = "${local.name_prefix}-egress-proxy"
+    Environment = local.environment
+  }
+}
+
+output "egress_proxy_public_ip" {
+  value       = try(aws_instance.egress_proxy[0].public_ip, null)
+  description = "Public IP of the egress proxy instance (if enabled)"
+}
+
+output "egress_proxy_private_ip" {
+  value       = try(aws_instance.egress_proxy[0].private_ip, null)
+  description = "Private IP of the egress proxy instance (if enabled)"
+}
+
 resource "aws_lb_target_group" "web" {
   name     = "${local.name_prefix}-web-tg"
   port     = 3000
