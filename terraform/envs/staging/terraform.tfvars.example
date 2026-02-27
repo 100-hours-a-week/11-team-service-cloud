@@ -8,7 +8,11 @@ vpc_cidr = "10.2.0.0/16"
 azs      = ["ap-northeast-2a", "ap-northeast-2c"]
 
 # Buckets for deployment artifacts (read-only access granted to the EC2 role)
-deployment_buckets = ["scuad-staging-config"]
+# Bucket names must be globally unique in S3.
+s3_config_bucket_name = "scuad-staging-config"
+s3_app_bucket_name    = "scuad-staging"
+
+deployment_buckets = ["scuad-staging-config", "scuad-staging"]
 
 # Custom AMI (leave commented to use Ubuntu 24.04)
 # ami_id = "ami-xxxxxxxxxxxxxxxxx"

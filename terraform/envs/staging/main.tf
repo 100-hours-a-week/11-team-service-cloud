@@ -72,7 +72,7 @@ module "rds" {
 module "scuad_staging_config" {
   source = "../../modules/s3"
 
-  bucket_name = "scuad-staging-config"
+  bucket_name = var.s3_config_bucket_name
 
   # Defaults (documented for clarity)
   enable_versioning   = true
@@ -85,7 +85,7 @@ module "scuad_staging_config" {
 module "scuad_staging" {
   source = "../../modules/s3"
 
-  bucket_name = "scuad-staging"
+  bucket_name = var.s3_app_bucket_name
 
   enable_versioning   = true
   force_destroy       = false

@@ -23,6 +23,20 @@ variable "deployment_buckets" {
   default = []
 }
 
+# ---- S3 buckets (staging) ----
+# Bucket names must be globally unique in S3.
+variable "s3_config_bucket_name" {
+  description = "S3 bucket name for staging config/artifacts (docker-compose, etc.)"
+  type        = string
+  default     = "scuad-staging-config"
+}
+
+variable "s3_app_bucket_name" {
+  description = "S3 bucket name for staging app data (uploads, etc.)"
+  type        = string
+  default     = "scuad-staging"
+}
+
 variable "allowed_ssh_cidrs" {
   type    = list(string)
   default = []
