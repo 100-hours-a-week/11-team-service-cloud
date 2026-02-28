@@ -291,6 +291,23 @@ resource "aws_lb_listener" "http" {
   }
 }
 
+# - /api/* -> Spring (public ALB)
+resource "aws_lb_listener_rule" "public_api" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 10
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app_spring_public.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/*"]
+    }
+  }
+}
+
 # -------------------------
 # Internal ALB (private service-to-service)
 # -------------------------
@@ -308,6 +325,25 @@ resource "aws_lb" "internal" {
 
 resource "aws_lb_target_group" "app_spring_internal" {
   name     = "${local.name_prefix}-app-spring-int-tg"
+  port     = 8080
+  protocol = "HTTP"
+  vpc_id   = module.network.vpc_id
+
+  health_check {
+    path                = "/api/health"
+    protocol            = "HTTP"
+    matcher             = "200-399"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 5
+  }
+}
+
+# NOTE: A target group can only be associated with *one* load balancer.
+# We use separate target groups for public ALB and internal ALB.
+resource "aws_lb_target_group" "app_spring_public" {
+  name     = "${local.name_prefix}-app-spring-pub-tg"
   port     = 8080
   protocol = "HTTP"
   vpc_id   = module.network.vpc_id
@@ -555,7 +591,10 @@ resource "aws_autoscaling_group" "app_spring" {
     }
   }
 
-  target_group_arns = [aws_lb_target_group.app_spring_internal.arn]
+  target_group_arns = [
+    aws_lb_target_group.app_spring_internal.arn,
+    aws_lb_target_group.app_spring_public.arn,
+  ]
 }
 
 resource "aws_launch_template" "app_ai" {
