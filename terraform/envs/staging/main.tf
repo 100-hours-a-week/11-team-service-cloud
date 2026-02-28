@@ -11,9 +11,13 @@ provider "aws" {
   region = var.region
 }
 
+data "aws_caller_identity" "current" {}
+
 locals {
   environment = "staging"
   name_prefix = "${var.project_name}-${local.environment}"
+
+  ecr_registry = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.region}.amazonaws.com"
 }
 
 module "iam" {
@@ -390,10 +394,50 @@ resource "aws_launch_template" "web" {
 
   user_data = base64encode(<<-EOF
     #!/bin/bash
-    set -e
-    sudo systemctl enable --now docker || true
-    sudo docker rm -f web-nginx || true
-    sudo docker run -d --restart=always --name web-nginx -p 3000:80 nginx:stable
+    set -euxo pipefail
+    exec > >(tee -a /var/log/user-data.log) 2>&1
+
+    REGION="${var.region}"
+    ECR_REGISTRY="${local.ecr_registry}"
+
+    ENV_PARAM_NAME="/staging/fe/DOT_ENV"
+    APP_DIR="/opt/scuad"
+
+    FE_IMAGE="$ECR_REGISTRY/${var.ecr_fe_repo}:${var.ecr_image_tag}"
+
+    retry() {
+      local n=0
+      local max=10
+      local delay=3
+      until "$@"; do
+        n=$((n + 1))
+        if [ "$n" -ge "$max" ]; then
+          echo "Command failed after $${max} attempts: $*" >&2
+          return 1
+        fi
+        sleep "$delay"
+      done
+    }
+
+    systemctl enable --now docker
+    timeout 60 bash -c 'until docker info >/dev/null 2>&1; do echo "Waiting for docker..."; sleep 1; done'
+
+    mkdir -p "$APP_DIR"
+
+    retry aws ssm get-parameter \
+      --name "$ENV_PARAM_NAME" --with-decryption \
+      --query "Parameter.Value" --output text --region "$REGION" > "$APP_DIR/.env"
+    chmod 600 "$APP_DIR/.env" || true
+
+    retry bash -lc "aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ECR_REGISTRY"
+
+    retry docker pull "$FE_IMAGE"
+
+    docker rm -f scuad-frontend || true
+    docker run -d --restart unless-stopped --name scuad-frontend \
+      --env-file "$APP_DIR/.env" \
+      -p 3000:3000 \
+      "$FE_IMAGE"
   EOF
   )
 }
@@ -435,7 +479,55 @@ resource "aws_launch_template" "app_spring" {
 
   iam_instance_profile { name = module.iam.iam_instance_profile_name }
 
-  user_data = base64encode("#!/bin/bash\nset -e\n")
+  user_data = base64encode(<<-EOF
+    #!/bin/bash
+    set -euxo pipefail
+    exec > >(tee -a /var/log/user-data.log) 2>&1
+
+    REGION="${var.region}"
+    APP_DIR="/opt/scuad"
+    COMPOSE_S3_URI="s3://${var.s3_config_bucket_name}/be/docker-compose.yml"
+    ENV_PARAM_NAME="/staging/be/DOT_ENV"
+    ECR_REGISTRY="${local.ecr_registry}"
+
+    BE_IMAGE="$ECR_REGISTRY/${var.ecr_be_repo}:${var.ecr_image_tag}"
+
+    retry() {
+      local n=0
+      local max=10
+      local delay=3
+      until "$@"; do
+        n=$((n + 1))
+        if [ "$n" -ge "$max" ]; then
+          echo "Command failed after $${max} attempts: $*" >&2
+          return 1
+        fi
+        sleep "$delay"
+      done
+    }
+
+    systemctl enable --now docker
+    timeout 120 bash -c 'until docker info >/dev/null 2>&1; do echo "Waiting for docker..."; sleep 1; done'
+
+    mkdir -p "$APP_DIR"
+    cd "$APP_DIR"
+
+    retry aws s3 cp "$COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+
+    retry aws ssm get-parameter \
+      --name "$ENV_PARAM_NAME" --with-decryption \
+      --query "Parameter.Value" --output text --region "$REGION" > "$APP_DIR/.env"
+    chmod 600 "$APP_DIR/.env" || true
+
+    retry bash -lc "aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ECR_REGISTRY"
+
+    # Ensure backend image exists locally (compose should also reference main-latest)
+    retry docker pull "$BE_IMAGE"
+
+    retry docker compose pull
+    docker compose up -d --remove-orphans
+  EOF
+  )
 }
 
 resource "aws_autoscaling_group" "app_spring" {
@@ -471,11 +563,69 @@ resource "aws_launch_template" "app_ai" {
   image_id      = local.ami_id
   instance_type = var.ai_instance_type
 
+  # Root volume size override (AMI default is not a hard limit)
+  block_device_mappings {
+    device_name = "/dev/sda1"
+
+    ebs {
+      volume_size           = 20
+      volume_type           = "gp3"
+      delete_on_termination = true
+    }
+  }
+
   vpc_security_group_ids = [module.network.app_ai_security_group_id]
 
   iam_instance_profile { name = module.iam.iam_instance_profile_name }
 
-  user_data = base64encode("#!/bin/bash\nset -e\n")
+  user_data = base64encode(<<-EOF
+    #!/bin/bash
+    set -euxo pipefail
+    exec > >(tee -a /var/log/user-data.log) 2>&1
+
+    REGION="${var.region}"
+    ECR_REGISTRY="${local.ecr_registry}"
+
+    ENV_PARAM_NAME="/staging/ai/DOT_ENV"
+    APP_DIR="/opt/scuad"
+
+    AI_IMAGE="$ECR_REGISTRY/${var.ecr_ai_repo}:${var.ecr_image_tag}"
+
+    retry() {
+      local n=0
+      local max=10
+      local delay=3
+      until "$@"; do
+        n=$((n + 1))
+        if [ "$n" -ge "$max" ]; then
+          echo "Command failed after $${max} attempts: $*" >&2
+          return 1
+        fi
+        sleep "$delay"
+      done
+    }
+
+    systemctl enable --now docker
+    timeout 60 bash -c 'until docker info >/dev/null 2>&1; do echo "Waiting for docker..."; sleep 1; done'
+
+    mkdir -p "$APP_DIR"
+
+    retry aws ssm get-parameter \
+      --name "$ENV_PARAM_NAME" --with-decryption \
+      --query "Parameter.Value" --output text --region "$REGION" > "$APP_DIR/.env"
+    chmod 600 "$APP_DIR/.env" || true
+
+    retry bash -lc "aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ECR_REGISTRY"
+
+    retry docker pull "$AI_IMAGE"
+
+    docker rm -f scuad-ai || true
+    docker run -d --restart unless-stopped --name scuad-ai \
+      --env-file "$APP_DIR/.env" \
+      -p 8000:8000 \
+      "$AI_IMAGE"
+  EOF
+  )
 }
 
 resource "aws_autoscaling_group" "app_ai" {

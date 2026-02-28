@@ -23,6 +23,31 @@ variable "deployment_buckets" {
   default = []
 }
 
+# ---- ECR images ----
+variable "ecr_image_tag" {
+  description = "ECR image tag to deploy (all services)."
+  type        = string
+  default     = "main-latest"
+}
+
+variable "ecr_fe_repo" {
+  description = "ECR repository name for frontend image."
+  type        = string
+  default     = "scuad-frontend"
+}
+
+variable "ecr_be_repo" {
+  description = "ECR repository name for backend image. (docker-compose should reference the same tag)"
+  type        = string
+  default     = "scuad-backend"
+}
+
+variable "ecr_ai_repo" {
+  description = "ECR repository name for AI image."
+  type        = string
+  default     = "scuad-ai"
+}
+
 # ---- S3 buckets (staging) ----
 # Bucket names must be globally unique in S3.
 variable "s3_config_bucket_name" {
