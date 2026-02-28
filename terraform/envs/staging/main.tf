@@ -476,6 +476,15 @@ resource "aws_launch_template" "web" {
       "$FE_IMAGE"
   EOF
   )
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name        = "${local.name_prefix}-web"
+      Environment = local.environment
+      Tier        = "web"
+    }
+  }
 }
 
 resource "aws_autoscaling_group" "web" {
@@ -504,6 +513,12 @@ resource "aws_autoscaling_group" "web" {
   }
 
   target_group_arns = [aws_lb_target_group.web.arn]
+
+  tag {
+    key                 = "Name"
+    value               = "${local.name_prefix}-web"
+    propagate_at_launch = true
+  }
 }
 
 resource "aws_launch_template" "app_spring" {
@@ -564,6 +579,16 @@ resource "aws_launch_template" "app_spring" {
     docker compose up -d --remove-orphans
   EOF
   )
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name        = "${local.name_prefix}-app-spring"
+      Environment = local.environment
+      Tier        = "app"
+      Role        = "spring"
+    }
+  }
 }
 
 resource "aws_autoscaling_group" "app_spring" {
@@ -665,6 +690,16 @@ resource "aws_launch_template" "app_ai" {
       "$AI_IMAGE"
   EOF
   )
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name        = "${local.name_prefix}-app-ai"
+      Environment = local.environment
+      Tier        = "app"
+      Role        = "ai"
+    }
+  }
 }
 
 resource "aws_autoscaling_group" "app_ai" {
