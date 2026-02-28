@@ -12,6 +12,7 @@ azs      = ["ap-northeast-2a", "ap-northeast-2c"]
 s3_config_bucket_name = "scuad-staging-config"
 s3_app_bucket_name    = "scuad-staging"
 
+# EC2 instance role에 읽기 권한 줄 버킷 목록
 deployment_buckets = ["scuad-staging-config", "scuad-staging"]
 
 # ECR image deployment
@@ -57,7 +58,7 @@ ai_asg_max       = 6
 db_engine_version        = "8.0.45"
 db_instance_class        = "db.t4g.small"
 db_allocated_storage_gb  = 20
-# db_name = "db-name"
+db_name = "db-name"
 db_username              = "db-username"
 
 # db_password is required and should be provided via env var:
