@@ -557,6 +557,7 @@ resource "aws_launch_template" "app_spring" {
     ECR_REGISTRY="${local.ecr_registry}"
 
     BE_IMAGE="$ECR_REGISTRY/${var.ecr_be_repo}:${var.ecr_image_tag}"
+    STUB_AI_IMAGE="$ECR_REGISTRY/${var.ecr_ai_repo}:${var.stub_ai_image_tag}"
 
     retry() {
       local n=0
@@ -590,8 +591,16 @@ resource "aws_launch_template" "app_spring" {
     # Ensure backend image exists locally (compose should also reference main-latest)
     retry docker pull "$BE_IMAGE"
 
+    # Pull & run stub AI (tag: stub_ai)
+    retry docker pull "$STUB_AI_IMAGE"
+
     retry docker compose pull
     docker compose up -d --remove-orphans
+
+    docker rm -f scuad-stub-ai || true
+    docker run -d --restart unless-stopped --name scuad-stub-ai \
+      -p 8000:8000 \
+      "$STUB_AI_IMAGE"
   EOF
   )
 

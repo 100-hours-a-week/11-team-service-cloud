@@ -13,6 +13,12 @@ variable "alb_certificate_arn" {
   type        = string
 }
 
+variable "stub_ai_image_tag" {
+  description = "Tag for the stub AI image (default: stub_ai)."
+  type        = string
+  default     = "stub_ai"
+}
+
 variable "vpc_cidr" {
   type    = string
   default = "10.2.0.0/16"

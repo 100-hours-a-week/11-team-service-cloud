@@ -22,6 +22,9 @@ ecr_fe_repo = "scuad-frontend"
 ecr_be_repo = "scuad-backend"
 ecr_ai_repo = "scuad-ai"
 
+# Stub AI image tag (spring launch template will pull & run it)
+stub_ai_image_tag    = "stub_ai_image_tag"
+
 # Public ALB HTTPS (ACM certificate ARN)
 alb_certificate_arn = "arn:aws:acm:ap-northeast-2:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
