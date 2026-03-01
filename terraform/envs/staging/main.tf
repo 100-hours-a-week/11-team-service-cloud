@@ -280,10 +280,14 @@ resource "aws_lb_target_group" "web" {
   vpc_id   = module.network.vpc_id
 }
 
-resource "aws_lb_listener" "http" {
+resource "aws_lb_listener" "https" {
   load_balancer_arn = aws_lb.public.arn
-  port              = 80
-  protocol          = "HTTP"
+  port              = 443
+  protocol          = "HTTPS"
+
+  # Reasonable modern default. Change if you have a compliance requirement.
+  ssl_policy      = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn = var.alb_certificate_arn
 
   default_action {
     type             = "forward"
@@ -291,9 +295,26 @@ resource "aws_lb_listener" "http" {
   }
 }
 
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.public.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  # Always redirect HTTP -> HTTPS
+  default_action {
+    type = "redirect"
+
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
+  }
+}
+
 # - /api/* -> Spring (public ALB)
 resource "aws_lb_listener_rule" "public_api" {
-  listener_arn = aws_lb_listener.http.arn
+  listener_arn = aws_lb_listener.https.arn
   priority     = 10
 
   action {

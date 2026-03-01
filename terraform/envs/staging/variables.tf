@@ -8,6 +8,11 @@ variable "project_name" {
   default = "scuad"
 }
 
+variable "alb_certificate_arn" {
+  description = "ACM certificate ARN to attach to the public ALB (HTTPS :443 listener)."
+  type        = string
+}
+
 variable "vpc_cidr" {
   type    = string
   default = "10.2.0.0/16"
