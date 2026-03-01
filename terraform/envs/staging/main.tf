@@ -460,18 +460,12 @@ resource "aws_launch_template" "web" {
 
     mkdir -p "$APP_DIR"
 
-    retry aws ssm get-parameter \
-      --name "$ENV_PARAM_NAME" --with-decryption \
-      --query "Parameter.Value" --output text --region "$REGION" > "$APP_DIR/.env"
-    chmod 600 "$APP_DIR/.env" || true
-
     retry bash -lc "aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ECR_REGISTRY"
 
     retry docker pull "$FE_IMAGE"
 
     docker rm -f scuad-frontend || true
     docker run -d --restart unless-stopped --name scuad-frontend \
-      --env-file "$APP_DIR/.env" \
       -p 3000:3000 \
       "$FE_IMAGE"
   EOF
