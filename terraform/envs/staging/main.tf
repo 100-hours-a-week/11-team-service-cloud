@@ -754,6 +754,52 @@ resource "aws_autoscaling_group" "app_ai" {
   target_group_arns = [aws_lb_target_group.app_ai_internal.arn]
 }
 
+# --- Auto Scaling policies (Target Tracking) ---
+# Keeps average ASG CPU utilization near the target value.
+# NOTE: min/desired/max are still controlled by the ASG vars.
+
+resource "aws_autoscaling_policy" "web_cpu_70" {
+  name                   = "${local.name_prefix}-web-cpu-70"
+  autoscaling_group_name = aws_autoscaling_group.web.name
+  policy_type            = "TargetTrackingScaling"
+
+  target_tracking_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageCPUUtilization"
+    }
+
+    target_value = 70.0
+  }
+}
+
+resource "aws_autoscaling_policy" "app_spring_cpu_70" {
+  name                   = "${local.name_prefix}-app-spring-cpu-70"
+  autoscaling_group_name = aws_autoscaling_group.app_spring.name
+  policy_type            = "TargetTrackingScaling"
+
+  target_tracking_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageCPUUtilization"
+    }
+
+    target_value = 70.0
+  }
+}
+
+resource "aws_autoscaling_policy" "app_ai_cpu_70" {
+  name                   = "${local.name_prefix}-app-ai-cpu-70"
+  autoscaling_group_name = aws_autoscaling_group.app_ai.name
+  policy_type            = "TargetTrackingScaling"
+
+  target_tracking_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageCPUUtilization"
+    }
+
+    target_value = 70.0
+  }
+}
+
 output "alb_dns_name" { value = aws_lb.public.dns_name }
 output "rds_endpoint" { value = module.rds.endpoint }
 
