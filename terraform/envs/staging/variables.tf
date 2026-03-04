@@ -41,6 +41,12 @@ variable "ecr_image_tag" {
   default     = "main-latest"
 }
 
+variable "ecr_be_loadtest_image_tag" {
+  description = "ECR image tag to deploy (all services)."
+  type        = string
+  default     = "main-latest"
+}
+
 variable "ecr_fe_repo" {
   description = "ECR repository name for frontend image."
   type        = string

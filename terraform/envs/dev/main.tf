@@ -363,9 +363,13 @@ resource "aws_instance" "egress_proxy" {
     # Client allowlist
     acl allowed_vpc src ${var.vpc_cidr}
 
+%{if var.egress_proxy_allow_all}
+    # Destination: allow ALL (no domain allowlist)
+%{else}
     # Destination allowlist (domains)
     # Leading dot matches the domain and all subdomains.
     acl allowed_domains dstdomain ${join(" ", var.egress_proxy_allowed_domains)}
+%{endif}
 
     # Ports hardening
     acl SSL_ports port 443
@@ -373,8 +377,13 @@ resource "aws_instance" "egress_proxy" {
     http_access deny !Safe_ports
     http_access deny CONNECT !SSL_ports
 
+%{if var.egress_proxy_allow_all}
+    # Allow VPC -> ANY destination (CONNECT included)
+    http_access allow allowed_vpc
+%{else}
     # Allow only VPC -> allowed domains (CONNECT included)
     http_access allow allowed_vpc allowed_domains
+%{endif}
 
     # Deny everything else
     http_access deny all

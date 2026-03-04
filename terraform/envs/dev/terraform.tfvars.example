@@ -28,13 +28,17 @@ alb_certificate_arn = "arn:aws:acm:region:xxxxxxxxxxxxxxxxxxxxxxxxxx"
 enable_egress_proxy = true
 # egress_proxy_instance_type = "t3.micro"
 
-# Allow proxying only to Kakao domains
-# Squid matches subdomains when you prefix with a dot.
-egress_proxy_allowed_domains = [
-  ".kakao.com",
-  ".kakao.co.kr",
-  ".kakaocdn.net",
-]
+# Allow proxying to ANY website (no domain allowlist)
+# NOTE: still restricted by source IP (allowed_vpc = vpc_cidr) + port hardening.
+egress_proxy_allow_all = true
+
+# (Alternative) allowlist only certain domains:
+# egress_proxy_allow_all = false
+# egress_proxy_allowed_domains = [
+#   ".kakao.com",
+#   ".kakao.co.kr",
+#   ".kakaocdn.net",
+# ]
 
 # ---- Web ASG ----
 web_instance_type = "t3.small"
