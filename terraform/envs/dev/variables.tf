@@ -48,8 +48,14 @@ variable "egress_proxy_port" {
   default     = 3128
 }
 
+variable "egress_proxy_allow_all" {
+  description = "If true, allow proxying to any destination (still restricted to requests originating from within the VPC CIDR)."
+  type        = bool
+  default     = false
+}
+
 variable "egress_proxy_allowed_domains" {
-  description = "List of destination domains allowed through the proxy (Squid dstdomain). Example: ['.kakao.com', '.kakao.co.kr']"
+  description = "List of destination domains allowed through the proxy (Squid dstdomain) when egress_proxy_allow_all=false. Example: ['.kakao.com', '.kakao.co.kr']"
   type        = list(string)
   default     = []
 }
