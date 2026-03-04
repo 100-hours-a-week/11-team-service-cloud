@@ -28,7 +28,7 @@ module "iam" {
 
   # Parameter Store path prefix that EC2 instances are allowed to read.
   # Keep it environment-scoped so user_data can read the .env securely.
-  ssm_parameter_prefix = "/${var.project_name}/${local.environment}/"
+  ssm_parameter_prefix = "/${local.environment}/"
 }
 
 module "network" {
@@ -101,7 +101,7 @@ module "scuad_prod" {
 # NOTE: We intentionally ignore value changes so you can update it safely in the AWS Console
 # without Terraform overwriting it on the next apply.
 resource "aws_ssm_parameter" "staging_be_dot_env" {
-  name        = "/${var.project_name}/${local.environment}/be/DOT_ENV"
+  name        = "/${local.environment}/be/DOT_ENV"
   description = "scuad prod backend .env"
   type        = "SecureString"
   value       = "__SET_IN_CONSOLE__"
@@ -117,7 +117,7 @@ resource "aws_ssm_parameter" "staging_be_dot_env" {
 }
 
 resource "aws_ssm_parameter" "staging_fe_dot_env" {
-  name        = "/${var.project_name}/${local.environment}/fe/DOT_ENV"
+  name        = "/${local.environment}/fe/DOT_ENV"
   description = "scuad prod frontend .env"
   type        = "SecureString"
   value       = "__SET_IN_CONSOLE__"
@@ -133,7 +133,7 @@ resource "aws_ssm_parameter" "staging_fe_dot_env" {
 }
 
 resource "aws_ssm_parameter" "staging_ai_dot_env" {
-  name        = "/${var.project_name}/${local.environment}/ai/DOT_ENV"
+  name        = "/${local.environment}/ai/DOT_ENV"
   description = "scuad prod ai .env"
   type        = "SecureString"
   value       = "__SET_IN_CONSOLE__"
@@ -457,7 +457,7 @@ resource "aws_launch_template" "web" {
     REGION="${var.region}"
     ECR_REGISTRY="${local.ecr_registry}"
 
-    ENV_PARAM_NAME="/${var.project_name}/${local.environment}/fe/DOT_ENV"
+    ENV_PARAM_NAME="/${local.environment}/fe/DOT_ENV"
     APP_DIR="/opt/scuad"
 
     FE_IMAGE="$ECR_REGISTRY/${var.ecr_fe_repo}:${var.ecr_image_tag}"
@@ -553,7 +553,7 @@ resource "aws_launch_template" "app_spring" {
     REGION="${var.region}"
     APP_DIR="/opt/scuad"
     COMPOSE_S3_URI="s3://${var.s3_config_bucket_name}/be/docker-compose.yml"
-    ENV_PARAM_NAME="/${var.project_name}/${local.environment}/be/DOT_ENV"
+    ENV_PARAM_NAME="/${local.environment}/be/DOT_ENV"
     ECR_REGISTRY="${local.ecr_registry}"
 
     BE_IMAGE="$ECR_REGISTRY/${var.ecr_be_repo}:${var.ecr_image_tag}"
@@ -665,7 +665,7 @@ resource "aws_launch_template" "app_ai" {
     REGION="${var.region}"
     ECR_REGISTRY="${local.ecr_registry}"
 
-    ENV_PARAM_NAME="/${var.project_name}/${local.environment}/ai/DOT_ENV"
+    ENV_PARAM_NAME="/${local.environment}/ai/DOT_ENV"
     APP_DIR="/opt/scuad"
 
     AI_IMAGE="$ECR_REGISTRY/${var.ecr_ai_repo}:${var.ecr_image_tag}"
