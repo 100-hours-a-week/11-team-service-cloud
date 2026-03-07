@@ -6,6 +6,14 @@ terraform {
     }
   }
   required_version = ">= 1.14.3"
+
+  backend "s3" {
+    bucket         = "scuad-tfstate-ap-northeast-2"
+    key            = "envs/shared/terraform.tfstate"
+    region         = "ap-northeast-2"
+    dynamodb_table = "scuad-tfstate-lock"
+    encrypt        = true
+  }
 }
 
 provider "aws" {
@@ -60,6 +68,95 @@ module "scuad_dev_config" {
   vpce_id          = var.s3_config_vpce_id
 }
 
+# -------------------------
+# Terraform tfvars (per env) - SSM SecureString
+# 실제 값은 AWS Console 또는 CLI로 설정.
+# Terraform은 파라미터 존재만 관리하고 value는 ignore.
+# -------------------------
+resource "aws_ssm_parameter" "tfvars_v1" {
+  name        = "/tfvars/v1"
+  description = "Terraform tfvars for v1"
+  type        = "SecureString"
+  value       = "__SET_IN_CONSOLE__"
+
+  lifecycle { ignore_changes = [value] }
+
+  tags = { Project = var.project_name, ManagedBy = "terraform" }
+}
+
+resource "aws_ssm_parameter" "tfvars_shared" {
+  name        = "/tfvars/shared"
+  description = "Terraform tfvars for shared"
+  type        = "SecureString"
+  value       = "__SET_IN_CONSOLE__"
+
+  lifecycle { ignore_changes = [value] }
+
+  tags = { Project = var.project_name, ManagedBy = "terraform" }
+}
+
+resource "aws_ssm_parameter" "tfvars_dev" {
+  name        = "/tfvars/dev"
+  description = "Terraform tfvars for dev"
+  type        = "SecureString"
+  value       = "__SET_IN_CONSOLE__"
+
+  lifecycle { ignore_changes = [value] }
+
+  tags = { Project = var.project_name, ManagedBy = "terraform" }
+}
+
+resource "aws_ssm_parameter" "tfvars_staging" {
+  name        = "/tfvars/staging"
+  description = "Terraform tfvars for staging"
+  type        = "SecureString"
+  value       = "__SET_IN_CONSOLE__"
+
+  lifecycle { ignore_changes = [value] }
+
+  tags = { Project = var.project_name, ManagedBy = "terraform" }
+}
+
+resource "aws_ssm_parameter" "tfvars_prod" {
+  name        = "/tfvars/prod"
+  description = "Terraform tfvars for prod"
+  type        = "SecureString"
+  value       = "__SET_IN_CONSOLE__"
+
+  lifecycle { ignore_changes = [value] }
+
+  tags = { Project = var.project_name, ManagedBy = "terraform" }
+}
+
+# -------------------------
+# Terraform Backend Resources
+# -------------------------
+module "tfstate_bucket" {
+  source = "../../modules/s3"
+
+  bucket_name         = var.tfstate_bucket_name
+  enable_versioning   = true
+  force_destroy       = false
+  sse_algorithm       = "AES256"
+  block_public_access = true
+}
+
+resource "aws_dynamodb_table" "tfstate_lock" {
+  name         = var.tfstate_dynamodb_table_name
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "LockID"
+
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+
+  tags = {
+    Project   = var.project_name
+    ManagedBy = "terraform"
+  }
+}
+
 # Backward-compat: if exactly one repo is configured, expose its URL.
 output "ecr_repository_url" {
   description = "(Legacy) URL of the single ECR repository when exactly one is configured; otherwise null."
@@ -79,4 +176,14 @@ output "s3_config_bucket_name" {
 output "s3_config_bucket_arn" {
   description = "S3 bucket ARN for shared config/artifacts"
   value       = module.scuad_dev_config.bucket_arn
+}
+
+output "tfstate_bucket_name" {
+  description = "S3 bucket name for Terraform remote state"
+  value       = module.tfstate_bucket.bucket_name
+}
+
+output "tfstate_dynamodb_table_name" {
+  description = "DynamoDB table name for Terraform state locking"
+  value       = aws_dynamodb_table.tfstate_lock.name
 }
