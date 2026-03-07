@@ -66,37 +66,51 @@ export function createApiHandleSummary(apis) {
     const runMs = data?.state?.testRunDurationMs;
     const runSec = runMs ? runMs / 1000 : null;
 
-    const lines = [];
-    lines.push('');
-    lines.push('=== API breakdown (tag: api) ===');
-    lines.push('api | count | rps | fail | p(90) | p(95) | p(99) | max');
-    lines.push('---|---:|---:|---:|---:|---:|---:|---:');
+    const headers = ['api', 'count', 'rps', 'fail', 'p(90)', 'p(95)', 'p(99)', 'max'];
 
+    const rows = [];
     for (const api of apis) {
       const dur = pickMetric(data, `http_req_duration{api:${api}}`);
       const fail = pickMetric(data, `http_req_failed{api:${api}}`);
       const reqs = pickMetric(data, `http_reqs{api:${api}}`);
 
-      // Some k6 output setups don't keep tag-breakdowns for counters in summary.
-      // Trend.count is a reliable fallback.
       const count = (reqs?.count ?? dur?.count ?? 0);
       const rps = reqs?.rate ?? (runSec ? count / runSec : null);
-
-      // Prefer k6 built-in http_req_failed; if missing, fall back to check failures.
       const failRate = fail?.rate ?? inferFailRateFromChecks(data, api);
 
-      lines.push(
-        [
-          api,
-          String(count),
-          fmtNum(rps, 2),
-          fmtPct(failRate),
-          fmtMs(dur?.['p(90)']),
-          fmtMs(dur?.['p(95)']),
-          fmtMs(dur?.['p(99)']),
-          fmtMs(dur?.max),
-        ].join(' | ')
-      );
+      rows.push([
+        api,
+        String(count),
+        fmtNum(rps, 2),
+        fmtPct(failRate),
+        fmtMs(dur?.['p(90)']),
+        fmtMs(dur?.['p(95)']),
+        fmtMs(dur?.['p(99)']),
+        fmtMs(dur?.max),
+      ]);
+    }
+
+    // 각 컬럼의 최대 너비 계산
+    const colWidths = headers.map((h, i) => {
+      const dataMax = rows.reduce((max, row) => Math.max(max, row[i].length), 0);
+      return Math.max(h.length, dataMax);
+    });
+
+    function padRow(cells) {
+      return cells.map((c, i) => {
+        // 첫 번째 컬럼(api)은 왼쪽 정렬, 나머지는 오른쪽 정렬
+        return i === 0 ? c.padEnd(colWidths[i]) : c.padStart(colWidths[i]);
+      }).join(' | ');
+    }
+
+    const lines = [];
+    lines.push('');
+    lines.push('=== API breakdown (tag: api) ===');
+    lines.push(padRow(headers));
+    lines.push(colWidths.map((w) => '-'.repeat(w)).join('-+-'));
+
+    for (const row of rows) {
+      lines.push(padRow(row));
     }
 
     lines.push('');
