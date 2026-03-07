@@ -66,3 +66,16 @@ variable "s3_config_vpce_id" {
   type        = string
   default     = null
 }
+
+# ---- Terraform Backend ----
+variable "tfstate_bucket_name" {
+  description = "S3 bucket name for Terraform remote state. Must be globally unique."
+  type        = string
+  default     = "scuad-tfstate-ap-northeast-2"
+}
+
+variable "tfstate_dynamodb_table_name" {
+  description = "DynamoDB table name for Terraform state locking."
+  type        = string
+  default     = "scuad-tfstate-lock"
+}
