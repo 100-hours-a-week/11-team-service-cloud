@@ -797,18 +797,6 @@ resource "aws_security_group" "rabbitmq" {
     security_groups = [module.network.app_ai_security_group_id]
   }
 
-  # Optional: RabbitMQ Management UI (15672) from SSH allowlist CIDRs (if provided)
-  dynamic "ingress" {
-    for_each = length(var.allowed_ssh_cidrs) > 0 ? [1] : []
-    content {
-      description = "RabbitMQ management UI (allowed SSH CIDRs)"
-      from_port   = 15672
-      to_port     = 15672
-      protocol    = "tcp"
-      cidr_blocks = var.allowed_ssh_cidrs
-    }
-  }
-
   egress {
     from_port   = 0
     to_port     = 0
