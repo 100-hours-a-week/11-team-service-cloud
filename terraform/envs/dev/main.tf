@@ -680,6 +680,327 @@ output "internal_alb_dns_name" {
   description = "Internal ALB DNS name for service-to-service calls (VPC only)"
 }
 
+# -------------------------
+# Data services (standalone EC2; no ASG)
+# -------------------------
+
+resource "aws_security_group" "redis" {
+  name        = "${local.name_prefix}-redis-sg"
+  description = "Redis access (from app security groups)"
+  vpc_id      = module.network.vpc_id
+
+  ingress {
+    description     = "Redis from Spring"
+    from_port       = 6379
+    to_port         = 6379
+    protocol        = "tcp"
+    security_groups = [module.network.app_spring_security_group_id]
+  }
+
+  ingress {
+    description     = "Redis from AI"
+    from_port       = 6379
+    to_port         = 6379
+    protocol        = "tcp"
+    security_groups = [module.network.app_ai_security_group_id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${local.name_prefix}-redis-sg"
+    Environment = local.environment
+  }
+}
+
+resource "aws_instance" "redis" {
+  ami                    = local.ami_id
+  instance_type          = "t3.small"
+  subnet_id              = module.network.data_private_subnet_ids[0]
+  vpc_security_group_ids = [aws_security_group.redis.id]
+
+  iam_instance_profile = module.iam.iam_instance_profile_name
+
+  user_data = <<-EOF
+    #!/bin/bash
+    set -euxo pipefail
+    exec > >(tee -a /var/log/user-data.log) 2>&1
+
+    export DEBIAN_FRONTEND=noninteractive
+
+    REGION="${var.region}"
+    SERVICE="redis"
+    APP_DIR="/opt/scuad/$SERVICE"
+    COMPOSE_S3_URI="s3://scuad-dev-config/$SERVICE/docker-compose.yml"
+    ECR_REGISTRY="209192769586.dkr.ecr.$REGION.amazonaws.com"
+
+    retry() {
+      local n=0
+      local max=10
+      local delay=3
+      until "$@"; do
+        n=$((n + 1))
+        if [ "$n" -ge "$max" ]; then
+          echo "Command failed after $${max} attempts: $*" >&2
+          return 1
+        fi
+        sleep "$delay"
+      done
+    }
+
+    # Custom AMI pre-bakes docker + docker compose plugin + awscli
+    systemctl enable --now docker || true
+    timeout 120 bash -c 'until docker info >/dev/null 2>&1; do echo "Waiting for docker..."; sleep 1; done'
+
+    mkdir -p "$APP_DIR"
+    cd "$APP_DIR"
+
+    retry aws s3 cp "$COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+
+    retry bash -lc "aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ECR_REGISTRY"
+
+    retry docker compose pull
+    docker compose up -d --remove-orphans
+  EOF
+
+  tags = {
+    Name        = "${local.name_prefix}-redis"
+    Environment = local.environment
+    Role        = "redis"
+    Tier        = "data"
+  }
+}
+
+resource "aws_security_group" "rabbitmq" {
+  name        = "${local.name_prefix}-rabbitmq-sg"
+  description = "RabbitMQ access (from app security groups)"
+  vpc_id      = module.network.vpc_id
+
+  ingress {
+    description     = "AMQP from Spring"
+    from_port       = 5672
+    to_port         = 5672
+    protocol        = "tcp"
+    security_groups = [module.network.app_spring_security_group_id]
+  }
+
+  ingress {
+    description     = "AMQP from AI"
+    from_port       = 5672
+    to_port         = 5672
+    protocol        = "tcp"
+    security_groups = [module.network.app_ai_security_group_id]
+  }
+
+  # Optional: RabbitMQ Management UI (15672) from SSH allowlist CIDRs (if provided)
+  dynamic "ingress" {
+    for_each = length(var.allowed_ssh_cidrs) > 0 ? [1] : []
+    content {
+      description = "RabbitMQ management UI (allowed SSH CIDRs)"
+      from_port   = 15672
+      to_port     = 15672
+      protocol    = "tcp"
+      cidr_blocks = var.allowed_ssh_cidrs
+    }
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${local.name_prefix}-rabbitmq-sg"
+    Environment = local.environment
+  }
+}
+
+resource "aws_instance" "rabbitmq" {
+  ami                    = local.ami_id
+  instance_type          = "t3.small"
+  subnet_id              = module.network.data_private_subnet_ids[0]
+  vpc_security_group_ids = [aws_security_group.rabbitmq.id]
+
+  iam_instance_profile = module.iam.iam_instance_profile_name
+
+  user_data = <<-EOF
+    #!/bin/bash
+    set -euxo pipefail
+    exec > >(tee -a /var/log/user-data.log) 2>&1
+
+    export DEBIAN_FRONTEND=noninteractive
+
+    REGION="${var.region}"
+    SERVICE="rabbitmq"
+    APP_DIR="/opt/scuad/$SERVICE"
+    COMPOSE_S3_URI="s3://scuad-dev-config/$SERVICE/docker-compose.yml"
+    ECR_REGISTRY="209192769586.dkr.ecr.$REGION.amazonaws.com"
+
+    retry() {
+      local n=0
+      local max=10
+      local delay=3
+      until "$@"; do
+        n=$((n + 1))
+        if [ "$n" -ge "$max" ]; then
+          echo "Command failed after $${max} attempts: $*" >&2
+          return 1
+        fi
+        sleep "$delay"
+      done
+    }
+
+    # Custom AMI pre-bakes docker + docker compose plugin + awscli
+    systemctl enable --now docker || true
+    timeout 120 bash -c 'until docker info >/dev/null 2>&1; do echo "Waiting for docker..."; sleep 1; done'
+
+    mkdir -p "$APP_DIR"
+    cd "$APP_DIR"
+
+    retry aws s3 cp "$COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+
+    retry bash -lc "aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ECR_REGISTRY"
+
+    retry docker compose pull
+    docker compose up -d --remove-orphans
+  EOF
+
+  # Slightly larger root volume is usually helpful for queues/logs.
+  root_block_device {
+    volume_size           = 20
+    volume_type           = "gp3"
+    delete_on_termination = true
+  }
+
+  tags = {
+    Name        = "${local.name_prefix}-rabbitmq"
+    Environment = local.environment
+    Role        = "rabbitmq"
+    Tier        = "data"
+  }
+}
+
+resource "aws_security_group" "weaviate" {
+  name        = "${local.name_prefix}-weaviate-sg"
+  description = "Weaviate access (from app security groups)"
+  vpc_id      = module.network.vpc_id
+
+  ingress {
+    description     = "Weaviate HTTP from Spring"
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [module.network.app_spring_security_group_id]
+  }
+
+  ingress {
+    description     = "Weaviate HTTP from AI"
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [module.network.app_ai_security_group_id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${local.name_prefix}-weaviate-sg"
+    Environment = local.environment
+  }
+}
+
+resource "aws_instance" "weaviate" {
+  ami                    = local.ami_id
+  instance_type          = "t3.small"
+  subnet_id              = module.network.data_private_subnet_ids[0]
+  vpc_security_group_ids = [aws_security_group.weaviate.id]
+
+  iam_instance_profile = module.iam.iam_instance_profile_name
+
+  user_data = <<-EOF
+    #!/bin/bash
+    set -euxo pipefail
+    exec > >(tee -a /var/log/user-data.log) 2>&1
+
+    export DEBIAN_FRONTEND=noninteractive
+
+    REGION="${var.region}"
+    SERVICE="weaviate"
+    APP_DIR="/opt/scuad/$SERVICE"
+    COMPOSE_S3_URI="s3://scuad-dev-config/$SERVICE/docker-compose.yml"
+    ECR_REGISTRY="209192769586.dkr.ecr.$REGION.amazonaws.com"
+
+    retry() {
+      local n=0
+      local max=10
+      local delay=3
+      until "$@"; do
+        n=$((n + 1))
+        if [ "$n" -ge "$max" ]; then
+          echo "Command failed after $${max} attempts: $*" >&2
+          return 1
+        fi
+        sleep "$delay"
+      done
+    }
+
+    # Custom AMI pre-bakes docker + docker compose plugin + awscli
+    systemctl enable --now docker || true
+    timeout 120 bash -c 'until docker info >/dev/null 2>&1; do echo "Waiting for docker..."; sleep 1; done'
+
+    mkdir -p "$APP_DIR"
+    cd "$APP_DIR"
+
+    retry aws s3 cp "$COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+
+    retry bash -lc "aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ECR_REGISTRY"
+
+    retry docker compose pull
+    docker compose up -d --remove-orphans
+  EOF
+
+  # Vector DB tends to need disk headroom.
+  root_block_device {
+    volume_size           = 50
+    volume_type           = "gp3"
+    delete_on_termination = true
+  }
+
+  tags = {
+    Name        = "${local.name_prefix}-weaviate"
+    Environment = local.environment
+    Role        = "weaviate"
+    Tier        = "data"
+  }
+}
+
+output "redis_private_ip" {
+  value       = aws_instance.redis.private_ip
+  description = "Private IP for Redis instance"
+}
+
+output "rabbitmq_private_ip" {
+  value       = aws_instance.rabbitmq.private_ip
+  description = "Private IP for RabbitMQ instance"
+}
+
+output "weaviate_private_ip" {
+  value       = aws_instance.weaviate.private_ip
+  description = "Private IP for Weaviate instance"
+}
+
 output "rds_endpoint" {
   value = module.rds.endpoint
 }
