@@ -168,3 +168,8 @@ variable "db_password" {
   type      = string
   sensitive = true
 }
+
+variable "monitoring_instance_type" {
+  type        = string
+  default     = "t3.small"
+}
