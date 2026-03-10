@@ -3,7 +3,7 @@ name: Backend CI
 on:
   workflow_dispatch: # 수동 실행
   pull_request:
-    branches: [develop, main]
+    branches: [develop, main, release]
     types: [opened, synchronize, reopened]
     paths-ignore:
       - "**.md" # 문서 변경 무시
@@ -13,6 +13,13 @@ on:
 permissions:
   id-token: write # AWS OIDC 인증에 필요
   contents: read # GitHub 저장소 접근 권한
+
+env:
+  AWS_REGION: ap-northeast-2
+  # ECR repository name
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'scuad-backend' }}
+  # PR이면 base.ref(타겟 브랜치), push면 ref_name(브랜치)
+  TARGET_BRANCH: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.ref_name }}
 
 jobs:
   # ----------------------------
@@ -67,7 +74,7 @@ jobs:
           echo "jar_name=$JAR_NAME" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Upload jar (temporary for S3)
+      - name: Upload jar 
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.build.outputs.jar_name }}
@@ -102,7 +109,7 @@ jobs:
         run: ./gradlew test 
 
       - name: Integration test + JaCoCo (main)
-        if: github.base_ref == 'main' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+        if: env.TARGET_BRANCH == 'main'
         env:
           COVERAGE_MIN: ${{ vars.COVERAGE_MIN }}
           SPRING_PROFILES_ACTIVE: ${{ vars.SPRING_PROFILES_ACTIVE_TEST }}
@@ -114,8 +121,8 @@ jobs:
   static_analysis:
     name: Static Analysis (Sonar Cloud)
     runs-on: ubuntu-latest
-    needs: test
-    if: github.base_ref == 'develop' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop')
+    needs: test 
+    if: github.base_ref == 'develop' || (github.event_name == 'workflow_dispatch' && github.ref_name == 'develop') || github.base_ref == 'release' || (github.event_name == 'workflow_dispatch' && github.ref_name == 'release')
 
     steps:
       - uses: actions/checkout@v4
@@ -140,98 +147,130 @@ jobs:
         run: ./gradlew build -x test sonar --info
 
   # ----------------------------
-  # 4. Main → S3 Release Archive
+  # 4. docker build & push (develop)
   # ----------------------------
-  release_archive:
-    name: Archive release to S3
+  docker_build_push_develop:
+    name: Build & Push Docker image (develop) to ECR
     runs-on: ubuntu-latest
-    needs: [build, test]
-    if: github.base_ref == 'main' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    needs: static_analysis
+    if: github.base_ref == 'develop' || (github.event_name == 'workflow_dispatch' && github.ref_name == 'develop')
 
     steps:
-      - name: Download built jar
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.build.outputs.jar_name }}
-          path: artifact
+      - uses: actions/checkout@v4
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: ap-northeast-2
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Validate release version
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tags
+        id: tags 
         run: |
-          VERSION="${{ needs.build.outputs.version }}"
-          if [[ "$VERSION" == *"SNAPSHOT"* ]]; then
-            echo "::error::SNAPSHOT version cannot be released: $VERSION"
-            exit 1
-          fi
-          echo "Release version validated: $VERSION"
+          SHA_SHORT="${GITHUB_SHA::7}"
+          echo "tag_sha=develop-${SHA_SHORT}" >> $GITHUB_OUTPUT
+          echo "tag_latest=develop-latest" >> $GITHUB_OUTPUT
 
-      - name: Upload release to S3
-        env:
-          BUCKET: ${{ secrets.RELEASE_BUCKET }}
-          PREFIX: releases/backend
-        run: |
-          # 버전 폴더에 저장 (버전당 하나)
-          aws s3 cp artifact/ \
-            s3://$BUCKET/$PREFIX/${{ needs.build.outputs.version }}/ \
-            --recursive \
-            --exclude "*" \
-            --include "*.jar"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-          # latest 폴더에 덮어쓰기 (최신 릴리즈, 기존 파일 삭제)
-          aws s3 sync artifact/ \
-            s3://$BUCKET/$PREFIX/latest/ \
-            --delete \
-            --exclude "*" \
-            --include "*.jar"
-
+      - name: Build and Push
+        uses: docker/build-push-action@v6
+        with: 
+          context: .
+          file: ./dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.tags.outputs.tag_sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.tags.outputs.tag_latest }}
+  
   # ----------------------------
-  # 5. Develop → S3 Snapshot Archive
+  # 5. docker build & push (release)
   # ----------------------------
-  snapshot_archive:
-    name: Archive snapshot to S3
+  docker_build_push_release:
+    name: Build & Push Docker image (release) to ECR
     runs-on: ubuntu-latest
-    needs: [build, test, static_analysis]
-    if: github.base_ref == 'develop' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop')
+    needs: static_analysis
+    if: github.base_ref == 'release' || (github.event_name == 'workflow_dispatch' && github.ref_name == 'release')
 
     steps:
-      - name: Set meta
-        id: meta
-        run: |
-          # KST (Asia/Seoul) 기준 타임스탬프 생성
-          echo "timestamp=$(TZ='Asia/Seoul' date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
-
-      - name: Download built jar
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.build.outputs.jar_name }}
-          path: artifact
+      - uses: actions/checkout@v4
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: ap-northeast-2
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Upload snapshot to S3
-        env:
-          BUCKET: ${{ secrets.RELEASE_BUCKET }}
-          PREFIX: snapshots/backend
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tags
+        id: tags 
         run: |
-          # 타임스탬프 폴더에 저장 (빌드 히스토리)
-          aws s3 cp artifact/ \
-            s3://$BUCKET/$PREFIX/${{ needs.build.outputs.version }}/${{ steps.meta.outputs.timestamp }}/ \
-            --recursive \
-            --exclude "*" \
-            --include "*.jar"
+          SHA_SHORT="${GITHUB_SHA::7}"
+          echo "tag_sha=staging-${SHA_SHORT}" >> $GITHUB_OUTPUT
+          echo "tag_latest=staging-latest" >> $GITHUB_OUTPUT
 
-          # latest 폴더에 덮어쓰기 (최신 스냅샷, 기존 파일 삭제)
-          aws s3 sync artifact/ \
-            s3://$BUCKET/$PREFIX/latest/ \
-            --delete \
-            --exclude "*" \
-            --include "*.jar"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push
+        uses: docker/build-push-action@v6
+        with: 
+          context: .
+          file: ./dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.tags.outputs.tag_sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.tags.outputs.tag_latest }}
+
+  # ----------------------------
+  # 6. docker build & push (main)
+  # ----------------------------
+  docker_build_push_main:
+    name: Build & Push Docker image (main) to ECR
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.base_ref == 'main' || (github.event_name == 'workflow_dispatch' && github.ref_name == 'main')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tags
+        id: tags
+        run: |
+          SHA_SHORT="${GITHUB_SHA::7}"
+          echo "tag_sha=main-${SHA_SHORT}" >> $GITHUB_OUTPUT
+          echo "tag_latest=main-latest" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.tags.outputs.tag_sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.tags.outputs.tag_latest }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
