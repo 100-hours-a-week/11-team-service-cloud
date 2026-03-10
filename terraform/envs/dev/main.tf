@@ -36,11 +36,12 @@ module "iam" {
 module "network" {
   source = "../../modules/network"
 
-  name_prefix       = local.name_prefix
-  environment       = local.environment
-  vpc_cidr          = var.vpc_cidr
-  azs               = var.azs
-  allowed_ssh_cidrs = var.allowed_ssh_cidrs
+  name_prefix               = local.name_prefix
+  environment               = local.environment
+  vpc_cidr                  = var.vpc_cidr
+  azs                       = var.azs
+  allowed_ssh_cidrs         = var.allowed_ssh_cidrs
+  node_exporter_cidr_blocks = [var.vpc_cidr]
 }
 
 module "ssm_human_access" {
