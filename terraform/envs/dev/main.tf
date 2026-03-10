@@ -622,7 +622,7 @@ resource "aws_launch_template" "app_ai" {
     device_name = "/dev/sda1"
 
     ebs {
-      volume_size           = 20
+      volume_size           = 40
       volume_type           = "gp3"
       delete_on_termination = true
     }
@@ -646,15 +646,45 @@ resource "aws_launch_template" "app_ai" {
     aws ecr get-login-password --region ap-northeast-2 | \
       docker login --username AWS --password-stdin 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com
 
-    docker pull 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai:dev-0.1.0
+    REGISTRY="209192769586.dkr.ecr.ap-northeast-2.amazonaws.com"
+    TAG="develop-latest"
+
+    # 5개 MSA 이미지 pull
+    docker pull $REGISTRY/scuad-ai-api:$TAG
+    docker pull $REGISTRY/scuad-ai-worker-resume:$TAG
+    docker pull $REGISTRY/scuad-ai-worker-job:$TAG
+    docker pull $REGISTRY/scuad-ai-worker-evaluate:$TAG
+    docker pull $REGISTRY/scuad-ai-worker-compare:$TAG
 
     # Parameter Store에서 .env 가져오기
-    aws ssm get-parameter --name "/ai/env/DEV_DOT_ENV" --with-decryption --query "Parameter.Value" --output text --region ap-northeast-2 > /home/ubuntu/.env
+    mkdir -p /opt/scuad
+    aws ssm get-parameter --name "/dev/ai/DOT_ENV" --with-decryption --query "Parameter.Value" --output text --region ap-northeast-2 > /opt/scuad/.env
+    chmod 600 /opt/scuad/.env
 
-    docker rm -f scuad-ai || true
-    docker run -d --restart unless-stopped --name scuad-ai -p 8000:8000 \
-      --env-file /home/ubuntu/.env \
-      209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai:dev-0.1.0
+    # 기존 컨테이너 정리
+    docker rm -f scuad-ai scuad-ai-api scuad-ai-worker-resume scuad-ai-worker-job scuad-ai-worker-evaluate scuad-ai-worker-compare || true
+
+    # API 서버 (포트 8000 노출)
+    docker run -d --restart unless-stopped --name scuad-ai-api \
+      --env-file /opt/scuad/.env -p 8000:8000 \
+      $REGISTRY/scuad-ai-api:$TAG
+
+    # 워커들
+    docker run -d --restart unless-stopped --name scuad-ai-worker-resume \
+      --env-file /opt/scuad/.env \
+      $REGISTRY/scuad-ai-worker-resume:$TAG
+
+    docker run -d --restart unless-stopped --name scuad-ai-worker-job \
+      --env-file /opt/scuad/.env \
+      $REGISTRY/scuad-ai-worker-job:$TAG
+
+    docker run -d --restart unless-stopped --name scuad-ai-worker-evaluate \
+      --env-file /opt/scuad/.env \
+      $REGISTRY/scuad-ai-worker-evaluate:$TAG
+
+    docker run -d --restart unless-stopped --name scuad-ai-worker-compare \
+      --env-file /opt/scuad/.env \
+      $REGISTRY/scuad-ai-worker-compare:$TAG
   EOF
   )
 
@@ -934,6 +964,14 @@ resource "aws_security_group" "weaviate" {
     description     = "Weaviate HTTP from AI"
     from_port       = 8080
     to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [module.network.app_ai_security_group_id]
+  }
+
+  ingress {
+    description     = "Weaviate gRPC from AI"
+    from_port       = 50051
+    to_port         = 50051
     protocol        = "tcp"
     security_groups = [module.network.app_ai_security_group_id]
   }
