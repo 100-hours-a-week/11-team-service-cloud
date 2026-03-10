@@ -325,7 +325,7 @@ resource "aws_security_group" "egress_proxy" {
     from_port   = var.egress_proxy_port
     to_port     = var.egress_proxy_port
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.vpc_cidr]
   }
 
   egress {
