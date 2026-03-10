@@ -1,0 +1,73 @@
+# Example tfvars for staging
+# Copy to terraform.tfvars and adjust values.
+
+region       = "ap-northeast-2"
+project_name = "scuad"
+
+vpc_cidr = "10.2.0.0/16"
+azs      = ["ap-northeast-2a", "ap-northeast-2c"]
+
+# Buckets for deployment artifacts (read-only access granted to the EC2 role)
+# Bucket names must be globally unique in S3.
+s3_config_bucket_name = "scuad-staging-config"
+s3_app_bucket_name    = "scuad-staging"
+
+# EC2 instance role에 읽기 권한 줄 버킷 목록
+deployment_buckets = ["scuad-staging-config", "scuad-staging"]
+
+# ECR image deployment
+# All services (FE/BE/AI) will deploy this tag from ECR.
+ecr_image_tag = "main-latest"
+ecr_fe_repo = "scuad-frontend"
+ecr_be_repo = "scuad-backend"
+ecr_ai_repo = "scuad-ai"
+
+# Stub AI image tag (spring launch template will pull & run it)
+stub_ai_image_tag    = "stub_ai_image_tag"
+
+# Public ALB HTTPS (ACM certificate ARN)
+alb_certificate_arn = "arn:aws:acm:ap-northeast-2:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# Egress proxy (public subnet) - enable if private instances must call external APIs (e.g., OAuth, OpenAI)
+enable_egress_proxy        = false
+egress_proxy_instance_type = "t3.micro"
+# egress_proxy_port = 3128
+
+# Allow proxying only to specific domains. Squid matches subdomains when you prefix with a dot.
+# egress_proxy_allowed_domains = [
+#   ".kakao.com",
+#   "api.openai.com",
+#   ".googleapis.com",
+# ]
+
+# Custom AMI (leave commented to use Ubuntu 24.04)
+# ami_id = "ami-xxxxxxxxxxxxxxxxx"
+
+ssm_human_role_names = ["role-name-1", "role-name-2"]
+
+web_instance_type = "t3.small"
+web_asg_min       = 2
+web_asg_desired   = 2
+web_asg_max       = 6
+
+app_instance_type      = "t3.small"
+app_spring_asg_min     = 2
+app_spring_asg_desired = 2
+app_spring_asg_max     = 6
+
+ai_instance_type = "t3.small"
+ai_asg_min       = 2
+ai_asg_desired   = 2
+ai_asg_max       = 6
+
+# RDS
+enable_rds               = false
+db_engine_version        = "8.0.45"
+db_instance_class        = "db.t4g.small"
+db_allocated_storage_gb  = 20
+db_name = "db-name"
+db_username              = "db-username"
+
+# db_password is required and should be provided via env var:
+#   export TF_VAR_db_password='...'
+db_password = "password1029!"
