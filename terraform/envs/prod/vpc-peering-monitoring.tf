@@ -32,3 +32,34 @@ resource "aws_route" "prod_private_to_dev" {
   destination_cidr_block    = var.dev_vpc_cidr
   vpc_peering_connection_id = data.aws_vpc_peering_connection.from_dev.id
 }
+
+# prod 인스턴스 SG에 dev 모니터링 → node_exporter(:9100) 스크레이핑 허용
+resource "aws_security_group_rule" "allow_node_exporter_from_dev_web" {
+  type              = "ingress"
+  security_group_id = module.network.web_security_group_id
+  from_port         = 9100
+  to_port           = 9100
+  protocol          = "tcp"
+  cidr_blocks       = [var.dev_vpc_cidr]
+  description       = "Allow Prometheus node_exporter scrape from dev monitoring"
+}
+
+resource "aws_security_group_rule" "allow_node_exporter_from_dev_spring" {
+  type              = "ingress"
+  security_group_id = module.network.app_spring_security_group_id
+  from_port         = 9100
+  to_port           = 9100
+  protocol          = "tcp"
+  cidr_blocks       = [var.dev_vpc_cidr]
+  description       = "Allow Prometheus node_exporter scrape from dev monitoring"
+}
+
+resource "aws_security_group_rule" "allow_node_exporter_from_dev_ai" {
+  type              = "ingress"
+  security_group_id = module.network.app_ai_security_group_id
+  from_port         = 9100
+  to_port           = 9100
+  protocol          = "tcp"
+  cidr_blocks       = [var.dev_vpc_cidr]
+  description       = "Allow Prometheus node_exporter scrape from dev monitoring"
+}
