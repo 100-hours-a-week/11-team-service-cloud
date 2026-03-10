@@ -92,6 +92,17 @@ resource "aws_security_group" "web" {
     }
   }
 
+  dynamic "ingress" {
+    for_each = length(var.node_exporter_cidr_blocks) > 0 ? [1] : []
+    content {
+      description = "Allow Prometheus node_exporter scrape"
+      from_port   = 9100
+      to_port     = 9100
+      protocol    = "tcp"
+      cidr_blocks = var.node_exporter_cidr_blocks
+    }
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -149,6 +160,17 @@ resource "aws_security_group" "app_spring" {
     }
   }
 
+  dynamic "ingress" {
+    for_each = length(var.node_exporter_cidr_blocks) > 0 ? [1] : []
+    content {
+      description = "Allow Prometheus node_exporter scrape"
+      from_port   = 9100
+      to_port     = 9100
+      protocol    = "tcp"
+      cidr_blocks = var.node_exporter_cidr_blocks
+    }
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -194,6 +216,17 @@ resource "aws_security_group" "app_ai" {
       to_port     = 22
       protocol    = "tcp"
       cidr_blocks = var.allowed_ssh_cidrs
+    }
+  }
+
+  dynamic "ingress" {
+    for_each = length(var.node_exporter_cidr_blocks) > 0 ? [1] : []
+    content {
+      description = "Allow Prometheus node_exporter scrape"
+      from_port   = 9100
+      to_port     = 9100
+      protocol    = "tcp"
+      cidr_blocks = var.node_exporter_cidr_blocks
     }
   }
 
