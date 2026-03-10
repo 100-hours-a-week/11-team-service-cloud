@@ -43,7 +43,7 @@ resource "aws_iam_policy" "ssm_session" {
 }
 
 resource "aws_iam_role_policy_attachment" "attach" {
-  for_each   = data.aws_iam_role.target
-  role       = each.value.name
+  for_each   = toset(var.role_names)
+  role       = each.key
   policy_arn = aws_iam_policy.ssm_session.arn
 }
