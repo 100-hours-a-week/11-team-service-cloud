@@ -1009,3 +1009,84 @@ output "weaviate_private_ip" {
 output "rds_endpoint" {
   value = module.rds.endpoint
 }
+
+
+# -------------------------
+# Monitoring
+# -------------------------
+resource "aws_security_group" "monitoring" {
+  name        = "${local.name_prefix}-monitoring-sg"
+  description = "Monitoring instance (Prometheus UI, Grafana)"
+  vpc_id      = module.network.vpc_id
+
+  ingress {
+    description = "Prometheus UI"
+    from_port   = 9090
+    to_port     = 9090
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Grafana"
+    from_port   = 3000
+    to_port     = 3000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${local.name_prefix}-monitoring-sg"
+    Environment = local.environment
+  }
+}
+
+resource "aws_ebs_volume" "prometheus_data" {
+  availability_zone = "ap-northeast-2a"
+  size              = 20
+  type              = "gp3"
+
+  tags = {
+    Name = "prometheus-data"
+  }
+}
+
+
+resource "aws_instance" "monitoring" {
+  ami                    = local.ami_id
+  instance_type          = var.monitoring_instance_type
+  subnet_id              = module.network.public_subnet_ids[0]
+  vpc_security_group_ids = [aws_security_group.monitoring.id]
+
+  tags = {
+    Name        = "${local.name_prefix}-monitoring"
+    Environment = local.environment
+  }
+
+  user_data = <<-EOF
+    #!/bin/bash
+    if ! blkid /dev/xvdf; then
+      mkfs -t ext4 /dev/xvdf
+    fi
+
+    # 마운트
+    mkdir -p /data/prometheus
+    mount /dev/xvdf /data/prometheus
+
+    # 재부팅 후에도 자동 마운트
+    echo "/dev/xvdf /data/prometheus ext4 defaults,nofail 0 2" >> /etc/fstab
+  EOF
+}
+
+resource "aws_volume_attachment" "prometheus_data" {
+  device_name = "/dev/xvdf"
+  volume_id   = aws_ebs_volume.prometheus_data.id
+  instance_id = aws_instance.monitoring.id
+}
