@@ -76,13 +76,13 @@ GitHub Actions를 사용하여 각 서비스(Frontend, Backend, AI)의 독립적
 ## CI 파이프라인
 
 <div align="center">
-<img width="600" align="center" alt="ci drawio" src="https://github.com/user-attachments/assets/cf9615f5-bf67-4196-8af4-1d114dc2412f" />
+<img width="700" alt="ci" src="https://github.com/user-attachments/assets/e58c52fc-7c91-4f29-b449-972e8b1ec8dc" />
 </div>
 
 ## CD 파이프라인
 
 <div align="center">
-<img width="600"  alt="cd" src="https://github.com/user-attachments/assets/99d33119-412c-4c2a-b06f-5da791d1f474" />
+<img width="700" alt="c2" src="https://github.com/user-attachments/assets/22a23eea-0bd5-4786-a549-f7343a246389" />
 </div>
 
 # 4. Terraform (IaC) - 인프라 구축
@@ -132,7 +132,8 @@ ASG Launch Template에 정의된 user_data로 인스턴스 생성 시 자동 실
 1. Docker 활성화
 2. ECR 로그인 및 Docker 이미지 Pull
 3. Parameter Store에서 환경변수 가져오기
-4. Docker 컨테이너 실행
+4. S3에서 docker compose 파일 가져오기 
+5. Docker 컨테이너 실행
 
 ### DNS 설정 (필수)
 
