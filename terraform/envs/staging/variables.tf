@@ -208,9 +208,3 @@ variable "db_password" {
   type      = string
   sensitive = true
 }
-
-variable "enable_rds" {
-  description = "RDS 인스턴스 생성 여부"
-  type        = bool
-  default     = false
-}

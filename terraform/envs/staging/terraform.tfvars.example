@@ -60,8 +60,7 @@ ai_asg_min       = 2
 ai_asg_desired   = 2
 ai_asg_max       = 6
 
-# RDS
-enable_rds               = false
+# RDS (staging is Multi-AZ in our defaults)
 db_engine_version        = "8.0.45"
 db_instance_class        = "db.t4g.small"
 db_allocated_storage_gb  = 20

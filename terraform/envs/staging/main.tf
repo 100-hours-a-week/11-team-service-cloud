@@ -58,7 +58,6 @@ module "ssm_human_access" {
 
 module "rds" {
   source = "../../modules/rds"
-  count  = var.enable_rds ? 1 : 0
 
   name_prefix          = local.name_prefix
   environment          = local.environment
@@ -801,7 +800,7 @@ resource "aws_autoscaling_policy" "app_ai_cpu_70" {
 }
 
 output "alb_dns_name" { value = aws_lb.public.dns_name }
-output "rds_endpoint" { value = var.enable_rds ? module.rds[0].endpoint : null }
+output "rds_endpoint" { value = module.rds.endpoint }
 
 output "s3_config_bucket_name" {
   description = "S3 bucket name for staging config/artifacts"
