@@ -329,6 +329,14 @@ resource "aws_security_group" "egress_proxy" {
     cidr_blocks = [var.vpc_cidr]
   }
 
+  ingress {
+    description = "Node Exporter from VPC"
+    from_port   = 9100
+    to_port     = 9100
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
