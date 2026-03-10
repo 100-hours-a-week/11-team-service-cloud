@@ -1105,6 +1105,66 @@ resource "aws_security_group" "monitoring" {
   }
 }
 
+# ── Monitoring IAM (Prometheus EC2 Service Discovery) ─────────────
+resource "aws_iam_role" "monitoring" {
+  name = "${local.name_prefix}-monitoring-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "${local.name_prefix}-monitoring-role"
+    Environment = local.environment
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "monitoring_ssm_core" {
+  role       = aws_iam_role.monitoring.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_role_policy_attachment" "monitoring_ecr_readonly" {
+  role       = aws_iam_role.monitoring.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+resource "aws_iam_role_policy" "monitoring_ec2_describe" {
+  name = "ec2-describe-instances"
+  role = aws_iam_role.monitoring.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["ec2:DescribeInstances"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_instance_profile" "monitoring" {
+  name = "${local.name_prefix}-monitoring-profile"
+  role = aws_iam_role.monitoring.name
+
+  tags = {
+    Name        = "${local.name_prefix}-monitoring-profile"
+    Environment = local.environment
+  }
+}
+
+# ── Monitoring EBS ───────────────────────────────────────────────
 resource "aws_ebs_volume" "prometheus_data" {
   availability_zone = "ap-northeast-2a"
   size              = 20
@@ -1121,7 +1181,7 @@ resource "aws_instance" "monitoring" {
   instance_type          = var.monitoring_instance_type
   subnet_id              = module.network.public_subnet_ids[0]
   vpc_security_group_ids = [aws_security_group.monitoring.id]
-  iam_instance_profile   = module.iam.iam_instance_profile_name
+  iam_instance_profile   = aws_iam_instance_profile.monitoring.name
 
   tags = {
     Name        = "${local.name_prefix}-monitoring"
