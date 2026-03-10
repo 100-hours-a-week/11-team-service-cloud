@@ -1121,6 +1121,7 @@ resource "aws_instance" "monitoring" {
   instance_type          = var.monitoring_instance_type
   subnet_id              = module.network.public_subnet_ids[0]
   vpc_security_group_ids = [aws_security_group.monitoring.id]
+  iam_instance_profile   = module.iam.iam_instance_profile_name
 
   tags = {
     Name        = "${local.name_prefix}-monitoring"
