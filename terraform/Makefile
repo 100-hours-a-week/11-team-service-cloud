@@ -3,7 +3,9 @@ PROJECT ?= scuad
 
 .PHONY: help \
 	pull-all pull-v1 pull-shared pull-dev pull-staging pull-prod \
-	push-all push-v1 push-shared push-dev push-staging push-prod
+	push-all push-v1 push-shared push-dev push-staging push-prod \
+	pull-v3-all pull-v3-shared-network pull-v3-shared-platform pull-v3-dev pull-v3-staging pull-v3-prod \
+	push-v3-all push-v3-shared-network push-v3-shared-platform push-v3-dev push-v3-staging push-v3-prod
 
 help:
 	@echo "Usage: make <target>"
@@ -14,6 +16,9 @@ help:
 	@echo "  push-<env>   SSM에 tfvars 올리기"
 	@echo ""
 	@echo "Environments: v1, shared, dev, staging, prod"
+	@echo ""
+	@echo "V3 (stored under /tfvars/v3/<env>): shared-network, shared-platform, dev, staging, prod"
+	@echo "Targets: push-v3-all|pull-v3-all, push-v3-<env>|pull-v3-<env>"
 
 # ---- Helper ----
 define pull_tfvars
@@ -69,3 +74,45 @@ pull-staging:
 
 pull-prod:
 	$(call pull_tfvars,prod,envs/prod)
+
+# =====================
+# V3 (terraform/v3)
+# SSM keys: /tfvars/v3/<env>
+# =====================
+
+# ---- Push (v3) ----
+push-v3-all: push-v3-shared-network push-v3-shared-platform push-v3-dev push-v3-staging push-v3-prod
+
+push-v3-shared-network:
+	$(call push_tfvars,v3/shared-network,v3/envs/shared-network)
+
+push-v3-shared-platform:
+	$(call push_tfvars,v3/shared-platform,v3/envs/shared-platform)
+
+# NOTE: create these env directories when you add cluster stacks
+push-v3-dev:
+	$(call push_tfvars,v3/dev,v3/envs/dev-cluster)
+
+push-v3-staging:
+	$(call push_tfvars,v3/staging,v3/envs/staging-cluster)
+
+push-v3-prod:
+	$(call push_tfvars,v3/prod,v3/envs/prod-cluster)
+
+# ---- Pull (v3) ----
+pull-v3-all: pull-v3-shared-network pull-v3-shared-platform pull-v3-dev pull-v3-staging pull-v3-prod
+
+pull-v3-shared-network:
+	$(call pull_tfvars,v3/shared-network,v3/envs/shared-network)
+
+pull-v3-shared-platform:
+	$(call pull_tfvars,v3/shared-platform,v3/envs/shared-platform)
+
+pull-v3-dev:
+	$(call pull_tfvars,v3/dev,v3/envs/dev-cluster)
+
+pull-v3-staging:
+	$(call pull_tfvars,v3/staging,v3/envs/staging-cluster)
+
+pull-v3-prod:
+	$(call pull_tfvars,v3/prod,v3/envs/prod-cluster)
