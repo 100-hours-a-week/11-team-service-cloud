@@ -325,14 +325,14 @@ resource "aws_security_group" "egress_proxy" {
     from_port   = var.egress_proxy_port
     to_port     = var.egress_proxy_port
     protocol    = "tcp"
-    cidr_blocks = ["13.209.217.240/32"]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["13.209.217.240/32"]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = {
@@ -726,7 +726,7 @@ resource "aws_security_group" "redis" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["13.209.217.240/32"]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = {
@@ -818,7 +818,7 @@ resource "aws_security_group" "rabbitmq" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["13.209.217.240/32"]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = {
@@ -917,7 +917,7 @@ resource "aws_security_group" "weaviate" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["13.209.217.240/32"]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = {
@@ -1055,7 +1055,7 @@ resource "aws_security_group" "monitoring" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["13.209.217.240/32"]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = {
