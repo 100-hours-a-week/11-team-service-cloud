@@ -325,14 +325,14 @@ resource "aws_security_group" "egress_proxy" {
     from_port   = var.egress_proxy_port
     to_port     = var.egress_proxy_port
     protocol    = "tcp"
-    cidr_blocks = [var.vpc_cidr]
+    cidr_blocks = ["13.209.217.240/32"]
   }
 
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["13.209.217.240/32"]
   }
 
   tags = {
@@ -726,7 +726,7 @@ resource "aws_security_group" "redis" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["13.209.217.240/32"]
   }
 
   tags = {
@@ -818,7 +818,7 @@ resource "aws_security_group" "rabbitmq" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["13.209.217.240/32"]
   }
 
   tags = {
@@ -917,7 +917,7 @@ resource "aws_security_group" "weaviate" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["13.209.217.240/32"]
   }
 
   tags = {
@@ -1020,11 +1020,27 @@ resource "aws_security_group" "monitoring" {
   vpc_id      = module.network.vpc_id
 
   ingress {
+    description = "HTTP"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTPS"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
     description = "Prometheus UI"
     from_port   = 9090
     to_port     = 9090
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["13.209.217.240/32"]
   }
 
   ingress {
@@ -1032,14 +1048,14 @@ resource "aws_security_group" "monitoring" {
     from_port   = 3000
     to_port     = 3000
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["13.209.217.240/32"]
   }
 
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["13.209.217.240/32"]
   }
 
   tags = {
