@@ -29,3 +29,9 @@ variable "create_eip" {
   type        = bool
   default     = false
 }
+
+variable "node_exporter_cidr_blocks" {
+  description = "CIDR blocks allowed to scrape node_exporter (:9100) on web/spring/ai instances"
+  type        = list(string)
+  default     = []
+}
