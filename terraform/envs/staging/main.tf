@@ -197,11 +197,11 @@ resource "aws_security_group" "egress_proxy" {
   }
 
   ingress {
-    description = "Node Exporter from VPC"
+    description = "Node Exporter from Dev VPC (monitoring)"
     from_port   = 9100
     to_port     = 9100
     protocol    = "tcp"
-    cidr_blocks = [var.vpc_cidr]
+    cidr_blocks = [var.dev_vpc_cidr]
   }
 
   egress {
