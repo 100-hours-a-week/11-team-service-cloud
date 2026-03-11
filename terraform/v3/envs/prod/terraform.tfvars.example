@@ -1,0 +1,12 @@
+# Example tfvars for prod
+project = "scuad"
+alb_certificate_arn = "arn:aws:acm:ap-northeast-2:<ACCOUNT_ID>:certificate/<CERT_ID>"
+nodeport_http       = 30080
+health_check_path   = "/"
+workers_min         = 3
+workers_desired     = 3
+workers_max         = 6
+worker_instance_type = "t3.medium"
+egress_proxy_instance_type = "t3.micro"
+egress_proxy_port          = 3128
+egress_proxy_allow_all     = true

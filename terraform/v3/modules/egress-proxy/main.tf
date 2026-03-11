@@ -1,0 +1,113 @@
+locals {
+  base_tags = merge(var.tags, {
+    Environment = var.environment
+  })
+}
+
+# Ubuntu 24.04 AMI via SSM Parameter (region-safe)
+data "aws_ssm_parameter" "ubuntu_2404_ami" {
+  name = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
+}
+
+data "aws_vpc" "this" {
+  id = var.vpc_id
+}
+
+locals {
+  effective_ami_id = var.ami_id != null ? var.ami_id : data.aws_ssm_parameter.ubuntu_2404_ami.value
+}
+
+resource "aws_security_group" "proxy" {
+  name        = "${var.name_prefix}-egress-proxy-sg"
+  description = "Forward proxy in public subnet for private instances"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    description = "Proxy from VPC"
+    from_port   = var.proxy_port
+    to_port     = var.proxy_port
+    protocol    = "tcp"
+    cidr_blocks = [data.aws_vpc.this.cidr_block]
+  }
+
+  ingress {
+    description = "Node Exporter from VPC"
+    from_port   = 9100
+    to_port     = 9100
+    protocol    = "tcp"
+    cidr_blocks = [data.aws_vpc.this.cidr_block]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = merge(local.base_tags, {
+    Name = "${var.name_prefix}-egress-proxy-sg"
+  })
+}
+
+resource "aws_instance" "proxy" {
+  ami                    = local.effective_ami_id
+  instance_type          = var.instance_type
+  subnet_id              = var.subnet_id
+  vpc_security_group_ids = [aws_security_group.proxy.id]
+
+  associate_public_ip_address = true
+  key_name                    = var.ssh_key_name
+
+  user_data = <<-EOF
+    #!/bin/bash
+    set -euxo pipefail
+    exec > >(tee -a /var/log/user-data.log) 2>&1
+
+    export DEBIAN_FRONTEND=noninteractive
+
+    apt-get update
+    apt-get install -y squid
+
+    cat >/etc/squid/squid.conf <<CONF
+    http_port ${var.proxy_port}
+
+    # Client allowlist
+    acl allowed_vpc src ${data.aws_vpc.this.cidr_block}
+
+%{if var.allow_all}
+    # Destination: allow ALL
+%{else}
+    # Destination allowlist (domains)
+    acl allowed_domains dstdomain ${join(" ", var.allowed_domains)}
+%{endif}
+
+    # Ports hardening
+    acl SSL_ports port 443
+    acl Safe_ports port 80 443
+    http_access deny !Safe_ports
+    http_access deny CONNECT !SSL_ports
+
+%{if var.allow_all}
+    http_access allow allowed_vpc
+%{else}
+    http_access allow allowed_vpc allowed_domains
+%{endif}
+
+    http_access deny all
+
+    forwarded_for delete
+    via off
+
+    access_log /var/log/squid/access.log
+    cache_log /var/log/squid/cache.log
+    CONF
+
+    systemctl enable --now squid
+    systemctl restart squid
+  EOF
+
+  tags = merge(local.base_tags, {
+    Name = "${var.name_prefix}-egress-proxy"
+  })
+}
