@@ -9,10 +9,10 @@ terraform {
   }
 
   backend "s3" {
-    bucket         = "scuad-tfstate-ap-northeast-2"
-    key            = "v3/envs/prod/terraform.tfstate"
-    region         = "ap-northeast-2"
-    dynamodb_table = "scuad-tfstate-lock"
-    encrypt        = true
+    bucket       = "scuad-tfstate-ap-northeast-2"
+    key          = "v3/envs/prod/terraform.tfstate"
+    region       = "ap-northeast-2"
+    use_lockfile = true
+    encrypt      = true
   }
 }
