@@ -10,7 +10,7 @@ terraform {
 
   backend "s3" {
     bucket         = "scuad-tfstate-ap-northeast-2"
-    key            = "v3/envs/shared-platform/terraform.tfstate"
+    key            = "v3/envs/staging/terraform.tfstate"
     region         = "ap-northeast-2"
     dynamodb_table = "scuad-tfstate-lock"
     encrypt        = true
