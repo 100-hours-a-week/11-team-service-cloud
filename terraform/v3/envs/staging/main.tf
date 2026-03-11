@@ -86,3 +86,33 @@ output "alb_dns_name" {
   value       = module.kubeadm_public_alb_workers.alb_dns_name
   description = "Public ALB DNS"
 }
+
+module "egress_proxy" {
+  source = "../../modules/egress-proxy"
+
+  name_prefix = local.name_prefix
+  environment = local.environment
+  vpc_id      = data.aws_ssm_parameter.vpc_id.value
+  subnet_id   = data.aws_subnet.alb_public_a.id
+
+  instance_type   = var.egress_proxy_instance_type
+  proxy_port      = var.egress_proxy_port
+  allow_all       = var.egress_proxy_allow_all
+  allowed_domains = var.egress_proxy_allowed_domains
+
+  ssh_key_name = var.ssh_key_name
+
+  tags = {
+    Project = var.project
+  }
+}
+
+output "egress_proxy_public_ip" {
+  value       = module.egress_proxy.public_ip
+  description = "Public IP of egress proxy"
+}
+
+output "egress_proxy_private_ip" {
+  value       = module.egress_proxy.private_ip
+  description = "Private IP of egress proxy"
+}

@@ -64,3 +64,27 @@ variable "worker_user_data" {
   type        = string
   default     = "#!/bin/bash\nset -euxo pipefail\n# TODO: install container runtime + kubelet/kubeadm and run kubeadm join\n"
 }
+
+variable "egress_proxy_instance_type" {
+  description = "EC2 instance type for egress proxy"
+  type        = string
+  default     = "t3.micro"
+}
+
+variable "egress_proxy_port" {
+  description = "Forward proxy port"
+  type        = number
+  default     = 3128
+}
+
+variable "egress_proxy_allow_all" {
+  description = "If true, allow proxy to all destinations"
+  type        = bool
+  default     = true
+}
+
+variable "egress_proxy_allowed_domains" {
+  description = "Allowed destination domains (used when egress_proxy_allow_all=false)"
+  type        = list(string)
+  default     = []
+}
