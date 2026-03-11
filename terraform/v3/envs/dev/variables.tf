@@ -88,3 +88,35 @@ variable "egress_proxy_allowed_domains" {
   type        = list(string)
   default     = []
 }
+
+# -------------------------
+# Golden AMI builder
+# -------------------------
+variable "ami_builder_instance_type" {
+  description = "EC2 instance type for golden AMI builder instances"
+  type        = string
+  default     = "t3.medium"
+}
+
+variable "ami_builder_allowed_ssh_cidrs" {
+  description = "Optional SSH allowlist for AMI builder instances"
+  type        = list(string)
+  default     = []
+}
+
+variable "k8s_minor_version" {
+  description = "Kubernetes stable channel used by pkgs.k8s.io (e.g. v1.29, v1.30)"
+  type        = string
+  default     = "v1.29"
+}
+
+variable "helm_version" {
+  description = "Helm version tag"
+  type        = string
+  default     = "v3.15.4"
+}
+
+variable "pause_image" {
+  description = "ECR mirrored pause image"
+  type        = string
+}
