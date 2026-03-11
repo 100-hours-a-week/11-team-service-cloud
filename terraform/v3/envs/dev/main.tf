@@ -1,6 +1,6 @@
 locals {
   environment = "dev"
-  name_prefix = "${var.project}-${local.environment}"
+  name_prefix = "${var.project}-v3-${local.environment}"
 }
 
 # Shared VPC id (created in v3/envs/shared-network)

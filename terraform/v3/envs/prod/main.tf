@@ -1,6 +1,6 @@
 locals {
   environment = "prod"
-  name_prefix = "${var.project}-${local.environment}"
+  name_prefix = "${var.project}-v3-${local.environment}"
 }
 
 data "aws_ssm_parameter" "vpc_id" {
