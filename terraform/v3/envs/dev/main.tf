@@ -118,3 +118,72 @@ output "egress_proxy_private_ip" {
   value       = module.egress_proxy.private_ip
   description = "Private IP of egress proxy"
 }
+
+# -------------------------
+# Golden AMI sample instances (dev)
+# - Public subnet so package installs work without egress proxy.
+# - Use SSM to access; SSH is optional.
+# -------------------------
+module "k8s_golden_ami_builder_worker" {
+  source = "../../modules/k8s-golden-ami-builder"
+
+  name_prefix = "${local.name_prefix}-k8s-worker"
+  environment = local.environment
+  vpc_id      = data.aws_ssm_parameter.vpc_id.value
+
+  subnet_id = data.aws_subnet.alb_public_a.id
+
+  instance_type     = var.ami_builder_instance_type
+  ssh_key_name      = var.ssh_key_name
+  allowed_ssh_cidrs = var.ami_builder_allowed_ssh_cidrs
+
+  enable_proxy     = false
+  proxy_private_ip = null
+  proxy_port       = var.egress_proxy_port
+
+  k8s_minor_version = var.k8s_minor_version
+  helm_version      = var.helm_version
+  pause_image       = var.pause_image
+
+  tags = {
+    Project = var.project
+    Role    = "k8s-worker-ami-builder"
+  }
+}
+
+module "k8s_golden_ami_builder_control_plane" {
+  source = "../../modules/k8s-golden-ami-builder"
+
+  name_prefix = "${local.name_prefix}-k8s-cp"
+  environment = local.environment
+  vpc_id      = data.aws_ssm_parameter.vpc_id.value
+
+  subnet_id = data.aws_subnet.alb_public_a.id
+
+  instance_type     = var.ami_builder_instance_type
+  ssh_key_name      = var.ssh_key_name
+  allowed_ssh_cidrs = var.ami_builder_allowed_ssh_cidrs
+
+  enable_proxy     = false
+  proxy_private_ip = null
+  proxy_port       = var.egress_proxy_port
+
+  k8s_minor_version = var.k8s_minor_version
+  helm_version      = var.helm_version
+  pause_image       = var.pause_image
+
+  tags = {
+    Project = var.project
+    Role    = "k8s-control-plane-ami-builder"
+  }
+}
+
+output "ami_builder_worker_instance_id" {
+  value       = module.k8s_golden_ami_builder_worker.instance_id
+  description = "Worker golden AMI sample instance id"
+}
+
+output "ami_builder_control_plane_instance_id" {
+  value       = module.k8s_golden_ami_builder_control_plane.instance_id
+  description = "Control plane golden AMI sample instance id"
+}

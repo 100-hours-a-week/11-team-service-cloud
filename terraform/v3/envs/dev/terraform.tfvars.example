@@ -3,12 +3,15 @@ project = "scuad"
 alb_certificate_arn = "arn:aws:acm:ap-northeast-2:<ACCOUNT_ID>:certificate/<CERT_ID>"
 nodeport_http       = 30080
 health_check_path   = "/"
-workers_min         = 2
-workers_desired     = 2
-workers_max         = 3
+workers_min          = 2
+workers_desired      = 2
+workers_max          = 3
 worker_instance_type = "t3.medium"
-# ssh_key_name       = "your-keypair-name"
-# worker_user_data   = "#!/bin/bash\n..."
+
+pause_image = "209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/k8s/pause:3.10"
+
+# ssh_key_name     = "your-keypair-name"
+# worker_user_data = "#!/bin/bash\n..."
 egress_proxy_instance_type = "t3.micro"
 egress_proxy_port          = 3128
 egress_proxy_allow_all     = true
