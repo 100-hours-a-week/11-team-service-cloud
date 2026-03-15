@@ -42,6 +42,8 @@ module "network" {
   azs                       = var.azs
   allowed_ssh_cidrs         = var.allowed_ssh_cidrs
   node_exporter_cidr_blocks = [var.vpc_cidr]
+  cadvisor_allowed_cidrs    = [var.vpc_cidr]
+  app_metrics_allowed_cidrs = [var.vpc_cidr]
 }
 
 module "ssm_human_access" {
@@ -762,14 +764,23 @@ resource "aws_security_group" "redis" {
   }
 
   ingress {
-    description = "node_exporter from monitoring"
+    description = "Node Exporter from VPC"
     from_port   = 9100
     to_port     = 9100
     protocol    = "tcp"
     cidr_blocks = [var.vpc_cidr]
   }
 
+  ingress {
+    description = "cAdvisor from VPC"
+    from_port   = 9102
+    to_port     = 9102
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
   egress {
+
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -862,14 +873,23 @@ resource "aws_security_group" "rabbitmq" {
   }
 
   ingress {
-    description = "node_exporter from monitoring"
+    description = "Node Exporter from VPC"
     from_port   = 9100
     to_port     = 9100
     protocol    = "tcp"
     cidr_blocks = [var.vpc_cidr]
   }
 
+  ingress {
+    description = "cAdvisor from VPC"
+    from_port   = 9102
+    to_port     = 9102
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
   egress {
+
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -977,14 +997,23 @@ resource "aws_security_group" "weaviate" {
   }
 
   ingress {
-    description = "node_exporter from monitoring"
+    description = "Node Exporter from VPC"
     from_port   = 9100
     to_port     = 9100
     protocol    = "tcp"
     cidr_blocks = [var.vpc_cidr]
   }
 
+  ingress {
+    description = "cAdvisor from VPC"
+    from_port   = 9102
+    to_port     = 9102
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
   egress {
+
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -1123,11 +1152,15 @@ resource "aws_security_group" "monitoring" {
   }
 
   ingress {
-    description = "node_exporter from monitoring"
-    from_port   = 9100
-    to_port     = 9100
+    description = "Loki from all VPCs"
+    from_port   = 3100
+    to_port     = 3100
     protocol    = "tcp"
-    cidr_blocks = [var.vpc_cidr]
+    cidr_blocks = [
+      var.vpc_cidr,
+      data.aws_vpc.staging.cidr_block,
+      data.aws_vpc.prod.cidr_block
+    ]
   }
 
   egress {
