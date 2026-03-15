@@ -764,14 +764,23 @@ resource "aws_security_group" "redis" {
   }
 
   ingress {
-    description = "node_exporter from monitoring"
+    description = "Node Exporter from VPC"
     from_port   = 9100
     to_port     = 9100
     protocol    = "tcp"
     cidr_blocks = [var.vpc_cidr]
   }
 
+  ingress {
+    description = "cAdvisor from VPC"
+    from_port   = 9102
+    to_port     = 9102
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
   egress {
+
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -864,14 +873,23 @@ resource "aws_security_group" "rabbitmq" {
   }
 
   ingress {
-    description = "node_exporter from monitoring"
+    description = "Node Exporter from VPC"
     from_port   = 9100
     to_port     = 9100
     protocol    = "tcp"
     cidr_blocks = [var.vpc_cidr]
   }
 
+  ingress {
+    description = "cAdvisor from VPC"
+    from_port   = 9102
+    to_port     = 9102
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
   egress {
+
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -979,14 +997,23 @@ resource "aws_security_group" "weaviate" {
   }
 
   ingress {
-    description = "node_exporter from monitoring"
+    description = "Node Exporter from VPC"
     from_port   = 9100
     to_port     = 9100
     protocol    = "tcp"
     cidr_blocks = [var.vpc_cidr]
   }
 
+  ingress {
+    description = "cAdvisor from VPC"
+    from_port   = 9102
+    to_port     = 9102
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
   egress {
+
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -1122,14 +1149,6 @@ resource "aws_security_group" "monitoring" {
     to_port     = 3000
     protocol    = "tcp"
     cidr_blocks = ["13.209.217.240/32"]
-  }
-
-  ingress {
-    description = "node_exporter from monitoring"
-    from_port   = 9100
-    to_port     = 9100
-    protocol    = "tcp"
-    cidr_blocks = [var.vpc_cidr]
   }
 
   ingress {
