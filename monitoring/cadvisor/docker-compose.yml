@@ -1,0 +1,24 @@
+services:
+  advisor:
+      container_name: scuad-cadvisor
+      
+      image: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/cadvisor:v0.51.0
+      
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock:ro
+        - /:/rootfs:ro
+        - /var/run:/var/run:ro
+        - /sys:/sys:ro
+        - /var/lib/docker/:/var/lib/docker:ro
+        - /dev/disk/:/dev/disk:ro
+      
+      privileged: true
+     
+      devices:
+        - /dev/kmsg:/dev/kmsg
+      
+      ports:
+        - 9102:8080
+      
+      command:
+        - -housekeeping_interval=5s
