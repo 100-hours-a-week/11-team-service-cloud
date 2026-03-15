@@ -463,10 +463,33 @@ resource "aws_launch_template" "web" {
       docker login --username AWS --password-stdin 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com
 
     docker pull 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend:dev-0.0.0
-
+    
     docker rm -f scuad-frontend || true
     docker run -d --restart unless-stopped --name scuad-frontend -p 3000:3000 \
       209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend:dev-0.0.0
+    
+    # --모니터링 환경 구성--------------------------------------------------------------
+    REGION="ap-northeast-2"
+    MONITORING_DIR="/opt/monitoring"
+    S3_BUCKET="scuad-dev-config"
+    S3_PATH="monitoring"
+    
+    PROMTAIL_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/docker-compose.yml"
+    PROMTAIL_CONF_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/promtail.yaml"
+
+    CADVISOR_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/cadvisor/docker-compose.yml"
+
+    mkdir -p "$MONITORING_DIR/promtail"
+    mkdir -p "$MONITORING_DIR/cadvisor"
+    
+    cd "$MONITORING_DIR/promtail"
+    aws s3 cp "$PROMTAIL_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    aws s3 cp "$PROMTAIL_CONF_S3_URI" ./promtail.yaml --region "$REGION"
+    docker compose up -d
+
+    cd "$MONITORING_DIR/cadvisor"
+    aws s3 cp "$CADVISOR_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    docker compose up -d
   EOF
   )
 
