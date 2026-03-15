@@ -1,0 +1,19 @@
+services:
+    promtail:
+      image: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/promtail:3.5.12
+      
+      container_name: scaud-promtail
+      
+      restart: unless-stopped
+
+      ports:
+        - "9080:9080"
+
+      volumes:
+        - "./promtail.yaml:/etc/promtail/promtail.yaml:ro"
+        - /var/run/docker.sock:/var/run/docker.sock
+        - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      
+      user: root
+      
+      command: -config.file=/etc/promtail/promtail.yaml

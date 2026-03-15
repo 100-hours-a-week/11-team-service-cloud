@@ -23,7 +23,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - "./conf/local/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+      - "./prometheus.yml:/etc/prometheus/prometheus.yml:ro"
       - prometheus_data:/prometheus
     command:
       - --config.file=/etc/prometheus/prometheus.yml
@@ -70,7 +70,7 @@ services:
     ports:
       - "9080:9080"
     volumes:
-      - "./conf/local/promtail.yaml:/etc/promtail/promtail.yaml:ro"
+      - "./promtail.yaml:/etc/promtail/promtail.yaml:ro"
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
     networks:
