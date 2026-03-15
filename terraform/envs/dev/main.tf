@@ -1246,3 +1246,43 @@ resource "aws_volume_attachment" "prometheus_data" {
   volume_id   = aws_ebs_volume.prometheus_data.id
   instance_id = aws_instance.monitoring.id
 }
+
+# ── Route 53 Private DNS for Monitoring ────────────────────────────────
+
+# 1. 내부 전용 호스팅 영역 생성
+resource "aws_route53_zone" "internal" {
+  name = "scuad.internal"
+
+  # Dev VPC 연결
+  vpc {
+    vpc_id = module.network.vpc_id
+  }
+
+  # Staging VPC 연결 (VPC Peering 데이터 소스 활용)
+  vpc {
+    vpc_id = data.aws_vpc.staging.id
+  }
+
+  # Prod VPC 연결 (VPC Peering 데이터 소스 활용)
+  vpc {
+    vpc_id = data.aws_vpc.prod.id
+  }
+
+  lifecycle {
+    ignore_changes = [vpc] # 추가적인 association은 aws_route53_zone_association으로 관리될 수 있으므로
+  }
+
+  tags = {
+    Name        = "${local.name_prefix}-internal-zone"
+    Environment = local.environment
+  }
+}
+
+# 2. Loki(모니터링 서버)용 A 레코드 생성
+resource "aws_route53_record" "loki" {
+  zone_id = aws_route53_zone.internal.zone_id
+  name    = "loki.scuad.internal"
+  type    = "A"
+  ttl     = "60"
+  records = [aws_instance.monitoring.private_ip]
+}
