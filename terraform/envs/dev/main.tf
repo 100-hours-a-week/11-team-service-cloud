@@ -42,6 +42,8 @@ module "network" {
   azs                       = var.azs
   allowed_ssh_cidrs         = var.allowed_ssh_cidrs
   node_exporter_cidr_blocks = [var.vpc_cidr]
+  cadvisor_allowed_cidrs    = [var.vpc_cidr]
+  app_metrics_allowed_cidrs = [var.vpc_cidr]
 }
 
 module "ssm_human_access" {
@@ -1128,6 +1130,18 @@ resource "aws_security_group" "monitoring" {
     to_port     = 9100
     protocol    = "tcp"
     cidr_blocks = [var.vpc_cidr]
+  }
+
+  ingress {
+    description = "Loki from all VPCs"
+    from_port   = 3100
+    to_port     = 3100
+    protocol    = "tcp"
+    cidr_blocks = [
+      var.vpc_cidr,
+      data.aws_vpc.staging.cidr_block,
+      data.aws_vpc.prod.cidr_block
+    ]
   }
 
   egress {
