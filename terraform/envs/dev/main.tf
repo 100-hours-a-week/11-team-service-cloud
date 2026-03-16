@@ -1146,7 +1146,7 @@ output "rds_endpoint" {
 # -------------------------
 resource "aws_security_group" "monitoring" {
   name        = "${local.name_prefix}-monitoring-sg"
-  description = "Monitoring instance (Prometheus UI, Grafana)"
+  description = "Monitoring instance (Prometheus, Grafana, Loki) access"
   vpc_id      = module.network.vpc_id
 
   ingress {
@@ -1206,7 +1206,7 @@ resource "aws_security_group" "monitoring" {
   }
 }
 
-# ── Monitoring IAM (Prometheus EC2 Service Discovery) ─────────────
+# ── Monitoring IAM (monitoring EC2 Service Discovery) ─────────────
 resource "aws_iam_role" "monitoring" {
   name = "${local.name_prefix}-monitoring-role"
 
@@ -1266,13 +1266,13 @@ resource "aws_iam_instance_profile" "monitoring" {
 }
 
 # ── Monitoring EBS ───────────────────────────────────────────────
-resource "aws_ebs_volume" "prometheus_data" {
+resource "aws_ebs_volume" "monitoring_data" {
   availability_zone = "ap-northeast-2a"
   size              = 20
   type              = "gp3"
 
   tags = {
-    Name = "prometheus-data"
+    Name = "monitoring-data"
   }
 }
 
@@ -1296,17 +1296,64 @@ resource "aws_instance" "monitoring" {
     fi
 
     # 마운트
-    mkdir -p /data/prometheus
-    mount /dev/xvdf /data/prometheus
+    mkdir -p /data/monitoring
+    mount /dev/xvdf /data/monitoring
 
     # 재부팅 후에도 자동 마운트
-    echo "/dev/xvdf /data/prometheus ext4 defaults,nofail 0 2" >> /etc/fstab
+    echo "/dev/xvdf /data/monitoring ext4 defaults,nofail 0 2" >> /etc/fstab
+
+    # 도커 실행
+    systemctl enable --now docker
+    timeout 60 bash -c 'until docker info >/dev/null 2>&1; do echo "Waiting for docker..."; sleep 1; done'
+
+    # 도커 네트워크 생성
+    docker network create scuad-monitoring-network || true
+
+    # prometheus, grafana, loki 데이터 디렉토리 생성
+    mkdir -p /data/monitoring/prometheus
+    mkdir -p /data/monitoring/grafana
+    mkdir -p /data/monitoring/loki
+    
+    chmod -R 777 /data/monitoring/prometheus
+    chmod -R 777 /data/monitoring/grafana
+    chmod -R 777 /data/monitoring/loki
+
+    # prometheus 환경 구성
+    mkdir -p /opt/monitoring/prometheus
+
+    aws s3 cp s3://scuad-dev-config/monitoring/prometheus/prometheus.yml /opt/monitoring/prometheus/prometheus.yml --region ap-northeast-2
+    aws s3 cp s3://scuad-dev-config/monitoring/prometheus/docker-compose.yml /opt/monitoring/prometheus/docker-compose.yml --region ap-northeast-2
+
+    chmod -R 777 /opt/monitoring/prometheus
+
+    docker compose -f /opt/monitoring/prometheus/docker-compose.yml up -d
+
+    # grafana 환경 구성
+    mkdir -p /opt/monitoring/grafana
+
+    aws s3 cp s3://scuad-dev-config/monitoring/grafana/docker-compose.yml /opt/monitoring/grafana/docker-compose.yml --region ap-northeast-2
+
+    chmod -R 777 /opt/monitoring/grafana
+    
+    docker compose -f /opt/monitoring/grafana/docker-compose.yml up -d
+
+    # loki 환경 구성
+    mkdir -p /opt/monitoring/loki
+
+    aws s3 cp s3://scuad-dev-config/monitoring/loki/loki-config.yml /opt/monitoring/loki/loki-config.yaml --region ap-northeast-2
+    aws s3 cp s3://scuad-dev-config/monitoring/loki/docker-compose.yml /opt/monitoring/loki/docker-compose.yml --region ap-northeast-2
+
+    chmod -R 777 /opt/monitoring/loki
+
+    docker compose -f /opt/monitoring/loki/docker-compose.yml up -d
+
+
   EOF
 }
 
-resource "aws_volume_attachment" "prometheus_data" {
+resource "aws_volume_attachment" "monitoring_data" {
   device_name = "/dev/xvdf"
-  volume_id   = aws_ebs_volume.prometheus_data.id
+  volume_id   = aws_ebs_volume.monitoring_data.id
   instance_id = aws_instance.monitoring.id
 }
 
