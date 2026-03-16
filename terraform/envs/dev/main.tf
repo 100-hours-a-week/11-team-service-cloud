@@ -462,11 +462,18 @@ resource "aws_launch_template" "web" {
     aws ecr get-login-password --region ap-northeast-2 | \
       docker login --username AWS --password-stdin 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com
 
-    docker pull 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend:dev-0.0.0
+    mkdir -p /opt/scuad
+    
+    aws ssm get-parameter --name "/dev/fe/DOT_ENV" --with-decryption --query "Parameter.Value" --output text --region ap-northeast-2 > /opt/scuad/.env
+    
+    chmod 600 /opt/scuad/.env
+
+    docker pull 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend:develop-latest
     
     docker rm -f scuad-frontend || true
     docker run -d --restart unless-stopped --name scuad-frontend -p 3000:3000 \
-      209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend:dev-0.0.0
+      --env-file /opt/scuad/.env \
+      209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend:develop-latest
     
     # --모니터링 환경 구성--------------------------------------------------------------
     REGION="ap-northeast-2"
