@@ -11,6 +11,6 @@ services:
     networks:
       - scuad-monitoring-network
 
-network:
+networks:
   scuad-monitoring-network:
     external: true
