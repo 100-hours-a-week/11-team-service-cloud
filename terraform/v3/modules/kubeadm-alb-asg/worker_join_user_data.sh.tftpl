@@ -13,7 +13,7 @@ echo "===== Worker bootstrap start ====="
 
 # kubelet node-ip 고정
 cat >/etc/default/kubelet <<EOF
-KUBELET_EXTRA_ARGS=--node-ip=${PRIVATE_IP}
+KUBELET_EXTRA_ARGS=--node-ip=$PRIVATE_IP
 EOF
 
 systemctl daemon-reload
@@ -41,20 +41,20 @@ done
 # join 정보 조회
 CONTROL_PLANE_ENDPOINT="$(aws ssm get-parameter \
 --region "$REGION" \
---name "${SSM_PREFIX}/control_plane_endpoint" \
+--name "$${SSM_PREFIX}/control_plane_endpoint" \
 --query 'Parameter.Value' \
 --output text)"
 
 JOIN_TOKEN="$(aws ssm get-parameter \
 --region "$REGION" \
---name "${SSM_PREFIX}/join_token" \
+--name "$${SSM_PREFIX}/join_token" \
 --with-decryption \
 --query 'Parameter.Value' \
 --output text)"
 
 CA_CERT_HASH="$(aws ssm get-parameter \
 --region "$REGION" \
---name "${SSM_PREFIX}/ca_cert_hash" \
+--name "$${SSM_PREFIX}/ca_cert_hash" \
 --with-decryption \
 --query 'Parameter.Value' \
 --output text)"
