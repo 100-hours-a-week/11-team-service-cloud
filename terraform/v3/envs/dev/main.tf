@@ -89,6 +89,112 @@ output "alb_dns_name" {
   description = "Public ALB DNS"
 }
 
+# --------------------------------------
+# Calico networking (IPIP + BGP)
+# - Allow node-to-node BGP (TCP/179)
+# - Allow IP-in-IP encapsulation (IP protocol 4)
+# Scope: all k8s nodes (control plane <-> workers, and within each group)
+# --------------------------------------
+
+# workers <-> workers
+resource "aws_security_group_rule" "workers_bgp_self" {
+  type              = "ingress"
+  security_group_id = module.kubeadm_public_alb_workers.workers_security_group_id
+
+  protocol  = "tcp"
+  from_port = 179
+  to_port   = 179
+
+  source_security_group_id = module.kubeadm_public_alb_workers.workers_security_group_id
+  description              = "Calico BGP (TCP/179) within workers"
+}
+
+resource "aws_security_group_rule" "workers_ipip_self" {
+  type              = "ingress"
+  security_group_id = module.kubeadm_public_alb_workers.workers_security_group_id
+
+  protocol  = "4" # IPIP
+  from_port = 0
+  to_port   = 0
+
+  source_security_group_id = module.kubeadm_public_alb_workers.workers_security_group_id
+  description              = "Calico IP-in-IP (protocol 4) within workers"
+}
+
+# cp <-> cp
+resource "aws_security_group_rule" "cp_bgp_self" {
+  type              = "ingress"
+  security_group_id = module.kubeadm_control_plane.security_group_id
+
+  protocol  = "tcp"
+  from_port = 179
+  to_port   = 179
+
+  source_security_group_id = module.kubeadm_control_plane.security_group_id
+  description              = "Calico BGP (TCP/179) within control plane"
+}
+
+resource "aws_security_group_rule" "cp_ipip_self" {
+  type              = "ingress"
+  security_group_id = module.kubeadm_control_plane.security_group_id
+
+  protocol  = "4" # IPIP
+  from_port = 0
+  to_port   = 0
+
+  source_security_group_id = module.kubeadm_control_plane.security_group_id
+  description              = "Calico IP-in-IP (protocol 4) within control plane"
+}
+
+# cp <-> workers
+resource "aws_security_group_rule" "cp_bgp_from_workers" {
+  type              = "ingress"
+  security_group_id = module.kubeadm_control_plane.security_group_id
+
+  protocol  = "tcp"
+  from_port = 179
+  to_port   = 179
+
+  source_security_group_id = module.kubeadm_public_alb_workers.workers_security_group_id
+  description              = "Calico BGP (TCP/179) from workers to control plane"
+}
+
+resource "aws_security_group_rule" "workers_bgp_from_cp" {
+  type              = "ingress"
+  security_group_id = module.kubeadm_public_alb_workers.workers_security_group_id
+
+  protocol  = "tcp"
+  from_port = 179
+  to_port   = 179
+
+  source_security_group_id = module.kubeadm_control_plane.security_group_id
+  description              = "Calico BGP (TCP/179) from control plane to workers"
+}
+
+resource "aws_security_group_rule" "cp_ipip_from_workers" {
+  type              = "ingress"
+  security_group_id = module.kubeadm_control_plane.security_group_id
+
+  protocol  = "4" # IPIP
+  from_port = 0
+  to_port   = 0
+
+  source_security_group_id = module.kubeadm_public_alb_workers.workers_security_group_id
+  description              = "Calico IP-in-IP (protocol 4) from workers to control plane"
+}
+
+resource "aws_security_group_rule" "workers_ipip_from_cp" {
+  type              = "ingress"
+  security_group_id = module.kubeadm_public_alb_workers.workers_security_group_id
+
+  protocol  = "4" # IPIP
+  from_port = 0
+  to_port   = 0
+
+  source_security_group_id = module.kubeadm_control_plane.security_group_id
+  description              = "Calico IP-in-IP (protocol 4) from control plane to workers"
+}
+
 module "egress_proxy" {
   source = "../../modules/egress-proxy"
 
