@@ -418,6 +418,32 @@ resource "aws_instance" "egress_proxy" {
 
     systemctl enable --now squid
     systemctl restart squid
+
+    systemctl enable --now docker
+
+    timeout 60 bash -c 'until docker info >/dev/null 2>&1; do echo "Waiting for docker..."; sleep 1; done'
+    # --모니터링 환경 구성--------------------------------------------------------------
+    REGION="ap-northeast-2"
+    MONITORING_DIR="/opt/monitoring"
+    S3_BUCKET="scuad-dev-config"
+    S3_PATH="monitoring"
+    
+    PROMTAIL_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/docker-compose.yml"
+    PROMTAIL_CONF_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/promtail.yaml"
+
+    CADVISOR_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/cadvisor/docker-compose.yml"
+
+    mkdir -p "$MONITORING_DIR/promtail"
+    mkdir -p "$MONITORING_DIR/cadvisor"
+    
+    cd "$MONITORING_DIR/promtail"
+    aws s3 cp "$PROMTAIL_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    aws s3 cp "$PROMTAIL_CONF_S3_URI" ./promtail.yaml --region "$REGION"
+    docker compose up -d
+
+    cd "$MONITORING_DIR/cadvisor"
+    aws s3 cp "$CADVISOR_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    docker compose up -d
   EOF
 
   tags = {
@@ -599,6 +625,30 @@ resource "aws_launch_template" "app_spring" {
 
     retry docker compose pull
     docker compose up -d --remove-orphans
+
+    # --모니터링 환경 구성--------------------------------------------------------------
+    REGION="ap-northeast-2"
+    MONITORING_DIR="/opt/monitoring"
+    S3_BUCKET="scuad-dev-config"
+    S3_PATH="monitoring"
+    
+    PROMTAIL_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/docker-compose.yml"
+    PROMTAIL_CONF_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/promtail.yaml"
+
+    CADVISOR_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/cadvisor/docker-compose.yml"
+
+    mkdir -p "$MONITORING_DIR/promtail"
+    mkdir -p "$MONITORING_DIR/cadvisor"
+    
+    cd "$MONITORING_DIR/promtail"
+    aws s3 cp "$PROMTAIL_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    aws s3 cp "$PROMTAIL_CONF_S3_URI" ./promtail.yaml --region "$REGION"
+    docker compose up -d
+
+    cd "$MONITORING_DIR/cadvisor"
+    aws s3 cp "$CADVISOR_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    docker compose up -d
+
   EOF
   )
 
@@ -717,6 +767,29 @@ resource "aws_launch_template" "app_ai" {
     docker run -d --restart unless-stopped --name scuad-ai-worker-compare \
       --env-file /opt/scuad/.env \
       $REGISTRY/scuad-ai-worker-compare:$TAG
+    
+       # --모니터링 환경 구성--------------------------------------------------------------
+    REGION="ap-northeast-2"
+    MONITORING_DIR="/opt/monitoring"
+    S3_BUCKET="scuad-dev-config"
+    S3_PATH="monitoring"
+    
+    PROMTAIL_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/docker-compose.yml"
+    PROMTAIL_CONF_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/promtail.yaml"
+
+    CADVISOR_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/cadvisor/docker-compose.yml"
+
+    mkdir -p "$MONITORING_DIR/promtail"
+    mkdir -p "$MONITORING_DIR/cadvisor"
+    
+    cd "$MONITORING_DIR/promtail"
+    aws s3 cp "$PROMTAIL_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    aws s3 cp "$PROMTAIL_CONF_S3_URI" ./promtail.yaml --region "$REGION"
+    docker compose up -d
+
+    cd "$MONITORING_DIR/cadvisor"
+    aws s3 cp "$CADVISOR_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    docker compose up -d
   EOF
   )
 
@@ -871,6 +944,29 @@ resource "aws_instance" "redis" {
 
     retry docker compose pull
     docker compose up -d --remove-orphans
+
+       # --모니터링 환경 구성--------------------------------------------------------------
+    REGION="ap-northeast-2"
+    MONITORING_DIR="/opt/monitoring"
+    S3_BUCKET="scuad-dev-config"
+    S3_PATH="monitoring"
+    
+    PROMTAIL_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/docker-compose.yml"
+    PROMTAIL_CONF_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/promtail.yaml"
+
+    CADVISOR_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/cadvisor/docker-compose.yml"
+
+    mkdir -p "$MONITORING_DIR/promtail"
+    mkdir -p "$MONITORING_DIR/cadvisor"
+    
+    cd "$MONITORING_DIR/promtail"
+    aws s3 cp "$PROMTAIL_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    aws s3 cp "$PROMTAIL_CONF_S3_URI" ./promtail.yaml --region "$REGION"
+    docker compose up -d
+
+    cd "$MONITORING_DIR/cadvisor"
+    aws s3 cp "$CADVISOR_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    docker compose up -d
   EOF
 
   tags = {
@@ -980,6 +1076,29 @@ resource "aws_instance" "rabbitmq" {
 
     retry docker compose pull
     docker compose up -d --remove-orphans
+
+       # --모니터링 환경 구성--------------------------------------------------------------
+    REGION="ap-northeast-2"
+    MONITORING_DIR="/opt/monitoring"
+    S3_BUCKET="scuad-dev-config"
+    S3_PATH="monitoring"
+    
+    PROMTAIL_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/docker-compose.yml"
+    PROMTAIL_CONF_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/promtail.yaml"
+
+    CADVISOR_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/cadvisor/docker-compose.yml"
+
+    mkdir -p "$MONITORING_DIR/promtail"
+    mkdir -p "$MONITORING_DIR/cadvisor"
+    
+    cd "$MONITORING_DIR/promtail"
+    aws s3 cp "$PROMTAIL_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    aws s3 cp "$PROMTAIL_CONF_S3_URI" ./promtail.yaml --region "$REGION"
+    docker compose up -d
+
+    cd "$MONITORING_DIR/cadvisor"
+    aws s3 cp "$CADVISOR_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    docker compose up -d
   EOF
 
   # Slightly larger root volume is usually helpful for queues/logs.
@@ -1104,6 +1223,29 @@ resource "aws_instance" "weaviate" {
 
     retry docker compose pull
     docker compose up -d --remove-orphans
+
+       # --모니터링 환경 구성--------------------------------------------------------------
+    REGION="ap-northeast-2"
+    MONITORING_DIR="/opt/monitoring"
+    S3_BUCKET="scuad-dev-config"
+    S3_PATH="monitoring"
+    
+    PROMTAIL_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/docker-compose.yml"
+    PROMTAIL_CONF_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/promtail.yaml"
+
+    CADVISOR_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/cadvisor/docker-compose.yml"
+
+    mkdir -p "$MONITORING_DIR/promtail"
+    mkdir -p "$MONITORING_DIR/cadvisor"
+    
+    cd "$MONITORING_DIR/promtail"
+    aws s3 cp "$PROMTAIL_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    aws s3 cp "$PROMTAIL_CONF_S3_URI" ./promtail.yaml --region "$REGION"
+    docker compose up -d
+
+    cd "$MONITORING_DIR/cadvisor"
+    aws s3 cp "$CADVISOR_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    docker compose up -d
   EOF
 
   # Vector DB tends to need disk headroom.
@@ -1376,6 +1518,28 @@ resource "aws_instance" "monitoring" {
 
     docker compose -f /opt/monitoring/loki/docker-compose.yml up -d
 
+       # --모니터링 환경 구성--------------------------------------------------------------
+    REGION="ap-northeast-2"
+    MONITORING_DIR="/opt/monitoring"
+    S3_BUCKET="scuad-dev-config"
+    S3_PATH="monitoring"
+    
+    PROMTAIL_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/docker-compose.yml"
+    PROMTAIL_CONF_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/promtail.yaml"
+
+    CADVISOR_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/cadvisor/docker-compose.yml"
+
+    mkdir -p "$MONITORING_DIR/promtail"
+    mkdir -p "$MONITORING_DIR/cadvisor"
+    
+    cd "$MONITORING_DIR/promtail"
+    aws s3 cp "$PROMTAIL_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    aws s3 cp "$PROMTAIL_CONF_S3_URI" ./promtail.yaml --region "$REGION"
+    docker compose up -d
+
+    cd "$MONITORING_DIR/cadvisor"
+    aws s3 cp "$CADVISOR_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    docker compose up -d
 
   EOF
 }
