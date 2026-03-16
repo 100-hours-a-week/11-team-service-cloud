@@ -1255,6 +1255,29 @@ resource "aws_iam_role_policy" "monitoring_ec2_describe" {
   })
 }
 
+# ── Monitoring IAM (S3 Read for docker-compose files) ───────────
+resource "aws_iam_role_policy" "monitoring_s3_read" {
+  name = "s3-read-policy"
+  role = aws_iam_role.monitoring.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::scuad-dev-config",
+          "arn:aws:s3:::scuad-dev-config/*"
+        ]
+      }
+    ]
+  })
+}
+
 resource "aws_iam_instance_profile" "monitoring" {
   name = "${local.name_prefix}-monitoring-profile"
   role = aws_iam_role.monitoring.name
@@ -1292,24 +1315,21 @@ resource "aws_instance" "monitoring" {
   user_data = <<-EOF
     #!/bin/bash
     
-    # AWS Nitro 인스턴스는 /dev/xvdf를 /dev/nvme1n1 등으로 인식함
-    # 추가된 두 번째 디스크(루트 제외)를 동적으로 찾음
-    DEVICE=$(lsblk -nd --output NAME | grep -v "nvme0n1" | head -n 1)
-    DEVICE_PATH="/dev/$DEVICE"
+    # AWS Nitro 인스턴스는 추가된 첫 번째 EBS 볼륨을 /dev/nvme1n1 로 인식합니다.
+    DEVICE_PATH="/dev/nvme1n1"
 
-    if [ -n "$DEVICE" ]; then
-      if ! blkid $DEVICE_PATH; then
-        mkfs -t ext4 $DEVICE_PATH
-      fi
-
-      # 마운트
-      mkdir -p /data/monitoring
-      mount $DEVICE_PATH /data/monitoring
-
-      # 재부팅 후에도 자동 마운트 (UUID를 사용하여 안정성 확보)
-      UUID=$(blkid -s UUID -o value $DEVICE_PATH)
-      echo "UUID=$UUID /data/monitoring ext4 defaults,nofail 0 2" >> /etc/fstab
+    # 디스크 포맷 (최초 1회)
+    if ! blkid $DEVICE_PATH; then
+      mkfs -t ext4 $DEVICE_PATH
     fi
+
+    # 마운트
+    mkdir -p /data/monitoring
+    mount $DEVICE_PATH /data/monitoring
+
+    # 재부팅 후에도 자동 마운트 (UUID를 사용하여 안정성 확보)
+    UUID=$(blkid -s UUID -o value $DEVICE_PATH)
+    echo "UUID=$UUID /data/monitoring ext4 defaults,nofail 0 2" >> /etc/fstab
 
     # 도커 실행
     systemctl enable --now docker
