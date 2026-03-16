@@ -195,6 +195,34 @@ resource "aws_security_group_rule" "workers_ipip_from_cp" {
   description              = "Calico IP-in-IP (protocol 4) from control plane to workers"
 }
 
+# --------------------------------------
+# Metrics / kubelet scrape
+# - metrics-server needs to reach kubelet HTTPS (TCP/10250) on every node
+# --------------------------------------
+resource "aws_security_group_rule" "workers_kubelet_10250_self" {
+  type              = "ingress"
+  security_group_id = module.kubeadm_public_alb_workers.workers_security_group_id
+
+  protocol  = "tcp"
+  from_port = 10250
+  to_port   = 10250
+
+  source_security_group_id = module.kubeadm_public_alb_workers.workers_security_group_id
+  description              = "kubelet HTTPS (TCP/10250) within workers (metrics-server)"
+}
+
+resource "aws_security_group_rule" "workers_kubelet_10250_from_cp" {
+  type              = "ingress"
+  security_group_id = module.kubeadm_public_alb_workers.workers_security_group_id
+
+  protocol  = "tcp"
+  from_port = 10250
+  to_port   = 10250
+
+  source_security_group_id = module.kubeadm_control_plane.security_group_id
+  description              = "kubelet HTTPS (TCP/10250) from control plane to workers (metrics-server)"
+}
+
 module "egress_proxy" {
   source = "../../modules/egress-proxy"
 
