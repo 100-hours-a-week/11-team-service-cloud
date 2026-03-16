@@ -1,6 +1,7 @@
 #!/bin/bash
-set -euxo pipefail
-exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+set -euo pipefail
+exec > /var/log/user-data.log 2>&1
+set -x
 
 # =========================
 # Variables
@@ -76,8 +77,15 @@ apt-get install -y \
   gpg \
   unzip \
   jq \
-  awscli \
+  snapd \
   containerd
+
+# =========================
+# Install AWS CLI (snap)
+# =========================
+systemctl enable --now snapd || true
+snap install aws-cli --classic || true
+aws --version || true
 
 # =========================
 # Disable swap
