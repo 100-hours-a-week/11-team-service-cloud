@@ -1146,7 +1146,7 @@ output "rds_endpoint" {
 # -------------------------
 resource "aws_security_group" "monitoring" {
   name        = "${local.name_prefix}-monitoring-sg"
-  description = "Monitoring instance (Prometheus, Grafana, Loki) access"
+  description = "Monitoring instance (Prometheus UI, Grafana)"
   vpc_id      = module.network.vpc_id
 
   ingress {
@@ -1291,16 +1291,25 @@ resource "aws_instance" "monitoring" {
 
   user_data = <<-EOF
     #!/bin/bash
-    if ! blkid /dev/xvdf; then
-      mkfs -t ext4 /dev/xvdf
+    
+    # AWS Nitro 인스턴스는 /dev/xvdf를 /dev/nvme1n1 등으로 인식함
+    # 추가된 두 번째 디스크(루트 제외)를 동적으로 찾음
+    DEVICE=$(lsblk -nd --output NAME | grep -v "nvme0n1" | head -n 1)
+    DEVICE_PATH="/dev/$DEVICE"
+
+    if [ -n "$DEVICE" ]; then
+      if ! blkid $DEVICE_PATH; then
+        mkfs -t ext4 $DEVICE_PATH
+      fi
+
+      # 마운트
+      mkdir -p /data/monitoring
+      mount $DEVICE_PATH /data/monitoring
+
+      # 재부팅 후에도 자동 마운트 (UUID를 사용하여 안정성 확보)
+      UUID=$(blkid -s UUID -o value $DEVICE_PATH)
+      echo "UUID=$UUID /data/monitoring ext4 defaults,nofail 0 2" >> /etc/fstab
     fi
-
-    # 마운트
-    mkdir -p /data/monitoring
-    mount /dev/xvdf /data/monitoring
-
-    # 재부팅 후에도 자동 마운트
-    echo "/dev/xvdf /data/monitoring ext4 defaults,nofail 0 2" >> /etc/fstab
 
     # 도커 실행
     systemctl enable --now docker
