@@ -1396,3 +1396,63 @@ resource "aws_route53_record" "loki" {
   ttl     = "60"
   records = [aws_instance.monitoring.private_ip]
 }
+
+# ── VPN Instance (WireGuard) ──────────────────────────────────────────
+
+resource "aws_security_group" "vpn" {
+  name        = "${local.name_prefix}-vpn-sg"
+  description = "Security group for VPN instance (WireGuard)"
+  vpc_id      = module.network.vpc_id
+
+  ingress {
+    description = "WireGuard UDP"
+    from_port   = 51820
+    to_port     = 51820
+    protocol    = "udp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "SSH"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${local.name_prefix}-vpn-sg"
+    Environment = local.environment
+  }
+}
+
+resource "aws_instance" "vpn" {
+  ami                         = "ami-0e7e09922c94a692b"
+  instance_type               = "t3.micro"
+  subnet_id                   = module.network.public_subnet_ids[0]
+  vpc_security_group_ids      = [aws_security_group.vpn.id]
+  associate_public_ip_address = true
+  source_dest_check           = false # VPN 라우터 역할을 위해 필수
+
+  tags = {
+    Name        = "${local.name_prefix}-vpn"
+    Environment = local.environment
+  }
+}
+
+resource "aws_eip_association" "vpn_eip" {
+  instance_id   = aws_instance.vpn.id
+  allocation_id = var.vpn_eip_allocation_id
+}
+
+output "vpn_public_ip" {
+  description = "Public IP of the VPN instance"
+  value       = var.vpn_public_ip
+}
