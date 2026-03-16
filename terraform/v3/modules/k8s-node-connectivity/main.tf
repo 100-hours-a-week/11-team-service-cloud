@@ -41,7 +41,7 @@ resource "aws_security_group_rule" "cp_bgp_from_workers" {
   to_port   = 179
 
   source_security_group_id = var.workers_sg_id
-  description              = "${local.desc_prefix}: Calico BGP (TCP/179) workers -> control plane"
+  description              = "${local.desc_prefix}: Calico BGP (TCP/179) workers to control plane"
 }
 
 resource "aws_security_group_rule" "workers_bgp_from_cp" {
@@ -54,7 +54,7 @@ resource "aws_security_group_rule" "workers_bgp_from_cp" {
   to_port   = 179
 
   source_security_group_id = var.control_plane_sg_id
-  description              = "${local.desc_prefix}: Calico BGP (TCP/179) control plane -> workers"
+  description              = "${local.desc_prefix}: Calico BGP (TCP/179) control plane to workers"
 }
 
 # -------------------------
@@ -96,7 +96,7 @@ resource "aws_security_group_rule" "cp_ipip_from_workers" {
   to_port   = 0
 
   source_security_group_id = var.workers_sg_id
-  description              = "${local.desc_prefix}: Calico IPIP (protocol 4) workers -> control plane"
+  description              = "${local.desc_prefix}: Calico IPIP (protocol 4) workers to control plane"
 }
 
 resource "aws_security_group_rule" "workers_ipip_from_cp" {
@@ -109,7 +109,7 @@ resource "aws_security_group_rule" "workers_ipip_from_cp" {
   to_port   = 0
 
   source_security_group_id = var.control_plane_sg_id
-  description              = "${local.desc_prefix}: Calico IPIP (protocol 4) control plane -> workers"
+  description              = "${local.desc_prefix}: Calico IPIP (protocol 4) control plane to workers"
 }
 
 # -------------------------
@@ -138,7 +138,7 @@ resource "aws_security_group_rule" "workers_kubelet_10250_from_cp" {
   to_port   = 10250
 
   source_security_group_id = var.control_plane_sg_id
-  description              = "${local.desc_prefix}: kubelet HTTPS (TCP/10250) control plane -> workers"
+  description              = "${local.desc_prefix}: kubelet HTTPS (TCP/10250) control plane to workers"
 }
 
 resource "aws_security_group_rule" "cp_kubelet_10250_self" {
@@ -164,7 +164,7 @@ resource "aws_security_group_rule" "cp_kubelet_10250_from_workers" {
   to_port   = 10250
 
   source_security_group_id = var.workers_sg_id
-  description              = "${local.desc_prefix}: kubelet HTTPS (TCP/10250) workers -> control plane"
+  description              = "${local.desc_prefix}: kubelet HTTPS (TCP/10250) workers to control plane"
 }
 
 resource "aws_security_group_rule" "workers_kubelet_10250_from_pods" {
