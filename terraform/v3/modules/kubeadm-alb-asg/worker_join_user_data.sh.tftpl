@@ -1,0 +1,90 @@
+#!/bin/bash
+set -euo pipefail
+exec > /var/log/k8s-worker-bootstrap.log 2>&1
+set -x
+
+REGION="ap-northeast-2"
+SSM_PREFIX="/scuad/v3/dev/kubeadm"
+CRI_SOCKET="unix:///run/containerd/containerd.sock"
+
+PRIVATE_IP="$(hostname -I | awk '{print $1}')"
+
+echo "===== Worker bootstrap start ====="
+
+# kubelet node-ip 고정
+cat >/etc/default/kubelet <<EOF
+KUBELET_EXTRA_ARGS=--node-ip=${PRIVATE_IP}
+EOF
+
+systemctl daemon-reload
+systemctl restart kubelet
+
+# containerd 준비
+systemctl enable containerd
+systemctl start containerd
+
+for i in $(seq 1 30); do
+  if systemctl is-active --quiet containerd; then
+    break
+  fi
+  sleep 5
+done
+
+# kubeadm 준비
+for i in $(seq 1 30); do
+  if command -v kubeadm >/dev/null 2>&1; then
+    break
+  fi
+  sleep 5
+done
+
+# join 정보 조회
+CONTROL_PLANE_ENDPOINT="$(aws ssm get-parameter \
+--region "$REGION" \
+--name "${SSM_PREFIX}/control_plane_endpoint" \
+--query 'Parameter.Value' \
+--output text)"
+
+JOIN_TOKEN="$(aws ssm get-parameter \
+--region "$REGION" \
+--name "${SSM_PREFIX}/join_token" \
+--with-decryption \
+--query 'Parameter.Value' \
+--output text)"
+
+CA_CERT_HASH="$(aws ssm get-parameter \
+--region "$REGION" \
+--name "${SSM_PREFIX}/ca_cert_hash" \
+--with-decryption \
+--query 'Parameter.Value' \
+--output text)"
+
+# 이미 join된 경우
+if [ -f /etc/kubernetes/kubelet.conf ]; then
+  echo "Node already joined"
+  exit 0
+fi
+
+# 실패 흔적 제거
+kubeadm reset -f || true
+rm -rf /etc/cni/net.d || true
+
+# join retry
+for i in $(seq 1 20); do
+  echo "kubeadm join attempt $i"
+
+  if kubeadm join "$CONTROL_PLANE_ENDPOINT" \
+    --token "$JOIN_TOKEN" \
+    --discovery-token-ca-cert-hash "$CA_CERT_HASH" \
+    --cri-socket "$CRI_SOCKET"; then
+
+    systemctl enable kubelet
+    systemctl restart kubelet
+    exit 0
+  fi
+
+  sleep 15
+done
+
+echo "kubeadm join failed"
+exit 1
