@@ -1,0 +1,16 @@
+services:
+  loki:
+    image: grafana/loki:latest
+    container_name: scuad-loki
+    restart: unless-stopped
+    volumes:
+      - ./loki-config.yml:/etc/loki/local-config.yaml
+      - /data/monitoring/loki:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - scuad-monitoring-network
+
+network:
+  scuad-monitoring-network:
+    external: true

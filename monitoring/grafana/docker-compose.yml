@@ -1,0 +1,15 @@
+services:
+  grafana:
+    image: grafana/grafana:latest
+    container_name: scuad-grafana
+    restart: unless-stopped
+    volumes:
+      - ./grafana-config.yml:/etc/grafana/grafana.ini
+      - /data/monitoring/grafana:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - scuad-monitoring-network
+network:
+  scuad-monitoring-network:
+    external: true
