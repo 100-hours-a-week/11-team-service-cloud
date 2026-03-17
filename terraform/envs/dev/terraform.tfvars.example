@@ -70,4 +70,9 @@ db_username              = "db-username"
 
 
 # ------ Monitoring ------
-monitoring_instance_type = t3.small
+monitoring_instance_type = "t3.small"
+
+# ------ VPN ------ 
+# vpn 고정아이피를 수동으로 만들어야 합니다.
+vpn_eip_allocation_id = "eipalloc-000000000000"
+vpn_public_ip         = "123.123.123.123"

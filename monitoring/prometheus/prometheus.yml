@@ -1,0 +1,34 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: "node_exporter"
+    ec2_sd_configs:
+      - region: ap-northeast-2
+        port: 9100
+        filters:
+          - name: tag:Environment
+            values: [dev, staging, prod]
+          - name: instance-state-name
+            values: [running]
+    relabel_configs:
+      # Name 태그를 job 라벨로 사용 (예: scuad-dev-redis → job=scuad-dev-redis)
+      - source_labels: [__meta_ec2_tag_Name]
+        target_label: job
+      # Name 태그에서 서비스명 추출 (scuad-dev-redis → redis, scuad-prod-app-spring → app-spring)
+      - source_labels: [__meta_ec2_tag_Name]
+        regex: "scuad-[^-]+-(.*)"
+        target_label: service
+        replacement: "${1}"
+      # 환경 라벨
+      - source_labels: [__meta_ec2_tag_Environment]
+        target_label: environment
+      # 인스턴스 ID
+      - source_labels: [__meta_ec2_instance_id]
+        target_label: instance_id
+      # instance 라벨을 private IP로 표시
+      - source_labels: [__meta_ec2_private_ip]
+        target_label: private_ip
+      # 가용영역
+      - source_labels: [__meta_ec2_availability_zone]
+        target_label: az
