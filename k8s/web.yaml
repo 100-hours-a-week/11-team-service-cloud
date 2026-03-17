@@ -1,0 +1,40 @@
+# Web Pods for development environment
+# $ kubectl create secret generic web-secret --from-env-file=.env.fe -n dev
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: dev
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: scuad
+  template:
+    metadata:
+      labels:
+        app: scuad
+    spec:
+      containers:
+        - name: web
+          image: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend:develop-latest
+          ports:
+            - containerPort: 80
+          envFrom:
+            - secretRef:
+                name: web-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: dev
+spec:
+  selector:
+    app: scuad
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: ClusterIP

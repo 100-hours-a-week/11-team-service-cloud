@@ -1,0 +1,138 @@
+# AI Pods for development environment
+# $ kubectl create secret generic ai-shared-secret --from-env-file=.env.ai -n dev
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-api
+  namespace: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-api
+  template:
+    metadata:
+      labels:
+        app: ai-api
+        tier: backend
+    spec:
+      containers:
+        - name: api
+          image: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-api:develop-latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: ai-shared-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-api
+  namespace: dev
+spec:
+  selector:
+    app: ai-api
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-worker-evaluate
+  namespace: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-worker-evaluate
+  template:
+    metadata:
+      labels:
+        app: ai-worker-evaluate
+        tier: worker
+    spec:
+      containers:
+        - name: worker-evaluate
+          image: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-evaluate:develop-latest
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: ai-shared-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-worker-job
+  namespace: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-worker-job
+  template:
+    metadata:
+      labels:
+        app: ai-worker-job
+        tier: worker
+    spec:
+      containers:
+        - name: worker-job
+          image: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-job:develop-latest
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: ai-shared-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-worker-resume
+  namespace: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-worker-resume
+  template:
+    metadata:
+      labels:
+        app: ai-worker-resume
+        tier: worker
+    spec:
+      containers:
+        - name: worker-resume
+          image: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-resume:develop-latest
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: ai-shared-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-worker-compare
+  namespace: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-worker-compare
+  template:
+    metadata:
+      labels:
+        app: ai-worker-compare
+        tier: worker
+    spec:
+      containers:
+        - name: worker-compare
+          image: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-compare:develop-latest
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: ai-shared-secret
