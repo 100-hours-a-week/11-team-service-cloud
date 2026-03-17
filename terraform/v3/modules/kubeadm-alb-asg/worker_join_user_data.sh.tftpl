@@ -9,30 +9,52 @@ CRI_SOCKET="unix:///run/containerd/containerd.sock"
 
 PRIVATE_IP="$(hostname -I | awk '{print $1}')"
 
-echo "===== Worker bootstrap start ====="
+# IMDSv2
+TOKEN="$(curl -sS -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")"
 
-# kubelet node-ip 고정
+INSTANCE_ID="$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/instance-id)"
+
+AZ="$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/placement/availability-zone)"
+
+echo "===== Worker bootstrap start ====="
+echo "PRIVATE_IP=$${PRIVATE_IP}"
+echo "INSTANCE_ID=$${INSTANCE_ID}"
+echo "AZ=$${AZ}"
+
+# kubelet node-ip / provider-id 고정
 cat >/etc/default/kubelet <<EOF
-KUBELET_EXTRA_ARGS=--node-ip=$PRIVATE_IP
+KUBELET_EXTRA_ARGS=--node-ip=$${PRIVATE_IP} --provider-id=aws:///$${AZ}/$${INSTANCE_ID}
 EOF
 
+# containerd sandbox image 고정
+if [ -f /etc/containerd/config.toml ]; then
+  sed -i 's#sandbox_image = ".*"#sandbox_image = "registry.k8s.io/pause:3.10"#' /etc/containerd/config.toml
+fi
+
 systemctl daemon-reload
-systemctl restart kubelet
 
 # containerd 준비
 systemctl enable containerd
-systemctl start containerd
+systemctl restart containerd
 
 for i in $(seq 1 30); do
   if systemctl is-active --quiet containerd; then
+    echo "containerd ready"
     break
   fi
   sleep 5
 done
 
-# kubeadm 준비
+# kubelet 준비
+systemctl enable kubelet
+systemctl restart kubelet
+
 for i in $(seq 1 30); do
   if command -v kubeadm >/dev/null 2>&1; then
+    echo "kubeadm found"
     break
   fi
   sleep 5
@@ -40,24 +62,26 @@ done
 
 # join 정보 조회
 CONTROL_PLANE_ENDPOINT="$(aws ssm get-parameter \
---region "$REGION" \
---name "$${SSM_PREFIX}/control_plane_endpoint" \
---query 'Parameter.Value' \
---output text)"
+  --region "$REGION" \
+  --name "$${SSM_PREFIX}/control_plane_endpoint" \
+  --query 'Parameter.Value' \
+  --output text)"
 
 JOIN_TOKEN="$(aws ssm get-parameter \
---region "$REGION" \
---name "$${SSM_PREFIX}/join_token" \
---with-decryption \
---query 'Parameter.Value' \
---output text)"
+  --region "$REGION" \
+  --name "$${SSM_PREFIX}/join_token" \
+  --with-decryption \
+  --query 'Parameter.Value' \
+  --output text)"
 
 CA_CERT_HASH="$(aws ssm get-parameter \
---region "$REGION" \
---name "$${SSM_PREFIX}/ca_cert_hash" \
---with-decryption \
---query 'Parameter.Value' \
---output text)"
+  --region "$REGION" \
+  --name "$${SSM_PREFIX}/ca_cert_hash" \
+  --with-decryption \
+  --query 'Parameter.Value' \
+  --output text)"
+
+echo "Join metadata retrieved from SSM"
 
 # 이미 join된 경우
 if [ -f /etc/kubernetes/kubelet.conf ]; then
@@ -65,11 +89,11 @@ if [ -f /etc/kubernetes/kubelet.conf ]; then
   exit 0
 fi
 
-# 실패 흔적 제거
+# 이전 실패 흔적 제거
 kubeadm reset -f || true
 rm -rf /etc/cni/net.d || true
 
-# join retry
+# kubeadm join 재시도
 for i in $(seq 1 20); do
   echo "kubeadm join attempt $i"
 
@@ -78,13 +102,14 @@ for i in $(seq 1 20); do
     --discovery-token-ca-cert-hash "$CA_CERT_HASH" \
     --cri-socket "$CRI_SOCKET"; then
 
-    systemctl enable kubelet
+    echo "kubeadm join success"
     systemctl restart kubelet
     exit 0
   fi
 
+  echo "join failed, retrying..."
   sleep 15
 done
 
-echo "kubeadm join failed"
+echo "kubeadm join failed after retries"
 exit 1
