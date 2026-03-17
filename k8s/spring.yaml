@@ -10,11 +10,11 @@ spec:
   replicas: 2
   selector:
     matchLabels:
-      app: scuad
+      app: spring-app
   template:
     metadata:
       labels:
-        app: scuad
+        app: spring-app
     spec:
       containers:
         - name: spring-app
@@ -32,7 +32,7 @@ metadata:
   namespace: dev
 spec:
   selector:
-    app: scuad
+    app: spring-app
   ports:
     - protocol: TCP
       port: 80

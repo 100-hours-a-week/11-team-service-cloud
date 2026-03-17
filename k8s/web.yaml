@@ -10,17 +10,17 @@ spec:
   replicas: 2
   selector:
     matchLabels:
-      app: scuad
+      app: web
   template:
     metadata:
       labels:
-        app: scuad
+        app: web
     spec:
       containers:
         - name: web
           image: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend:develop-latest
           ports:
-            - containerPort: 80
+            - containerPort: 3000
           envFrom:
             - secretRef:
                 name: web-secret
@@ -32,9 +32,9 @@ metadata:
   namespace: dev
 spec:
   selector:
-    app: scuad
+    app: web
   ports:
     - protocol: TCP
       port: 80
-      targetPort: 80
+      targetPort: 3000
   type: ClusterIP
