@@ -103,7 +103,12 @@ for i in $(seq 1 20); do
     --cri-socket "$CRI_SOCKET"; then
 
     echo "kubeadm join success"
+
+    # CNI/CRI 상태 반영을 위해 다시 한번 순서대로 재시작
+    systemctl daemon-reload
+    systemctl restart containerd
     systemctl restart kubelet
+
     exit 0
   fi
 
