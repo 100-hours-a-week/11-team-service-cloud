@@ -1,6 +1,14 @@
 locals {
   environment = "dev"
   name_prefix = "${var.project}-v3-${local.environment}"
+
+  # Common tags for all AWS resources in this env.
+  # NOTE: We keep the cluster ownership tag in Terraform to avoid drift.
+  common_tags = {
+    Project = var.project
+    # Required by AWS CCM / Kubernetes integrations
+    "kubernetes.io/cluster/${var.cluster_name}" = "owned"
+  }
 }
 
 # Shared VPC id (created in v3/envs/shared-network)
@@ -159,13 +167,24 @@ module "kubeadm_public_alb_workers" {
   workers_desired      = var.workers_desired
   workers_max          = var.workers_max
   worker_instance_type = var.worker_instance_type
+  worker_ami_id        = var.worker_ami_id
 
   ssh_key_name     = var.ssh_key_name
   worker_user_data = var.worker_user_data
 
-  tags = {
-    Project = var.project
-  }
+  control_plane_endpoint            = coalesce(var.kubeadm_control_plane_endpoint, module.kubeadm_control_plane_public_endpoint.dns_name)
+  kubeadm_join_token_ssm_param_name = var.kubeadm_join_token_ssm_param_name
+  kubeadm_ca_hash_ssm_param_name    = var.kubeadm_ca_hash_ssm_param_name
+
+  # If your private subnets have no NAT, workers need a proxy or additional VPC endpoints for package/image pulls.
+  http_proxy  = "http://${module.egress_proxy.private_ip}:${var.egress_proxy_port}"
+  https_proxy = "http://${module.egress_proxy.private_ip}:${var.egress_proxy_port}"
+
+  # Cluster Autoscaler integration
+  cluster_name              = var.cluster_name
+  enable_cluster_autoscaler = var.enable_cluster_autoscaler
+
+  tags = local.common_tags
 }
 
 output "alb_dns_name" {
@@ -540,6 +559,7 @@ module "k8s_node_connectivity" {
   pod_cidr = "192.168.0.0/16"
 }
 
+
 module "egress_proxy" {
   source = "../../modules/egress-proxy"
 
@@ -555,9 +575,7 @@ module "egress_proxy" {
 
   ssh_key_name = var.ssh_key_name
 
-  tags = {
-    Project = var.project
-  }
+  tags = local.common_tags
 }
 
 output "egress_proxy_public_ip" {
@@ -571,14 +589,14 @@ output "egress_proxy_private_ip" {
 }
 
 # -------------------------
-# Golden AMI sample instances (dev)
+# Golden AMI builder (dev)
 # - Public subnet so package installs work without egress proxy.
 # - Use SSM to access; SSH is optional.
 # -------------------------
-module "k8s_golden_ami_builder_worker" {
+module "k8s_golden_ami_builder" {
   source = "../../modules/k8s-golden-ami-builder"
 
-  name_prefix = "${local.name_prefix}-k8s-worker"
+  name_prefix = "${local.name_prefix}-k8s-ami-builder"
   environment = local.environment
   vpc_id      = data.aws_ssm_parameter.vpc_id.value
 
@@ -588,53 +606,20 @@ module "k8s_golden_ami_builder_worker" {
   ssh_key_name      = var.ssh_key_name
   allowed_ssh_cidrs = var.ami_builder_allowed_ssh_cidrs
 
-  enable_proxy     = false
-  proxy_private_ip = null
+  enable_proxy     = var.ami_builder_enable_proxy
+  proxy_private_ip = var.ami_builder_enable_proxy ? module.egress_proxy.private_ip : null
   proxy_port       = var.egress_proxy_port
 
   k8s_minor_version = var.k8s_minor_version
   helm_version      = var.helm_version
   pause_image       = var.pause_image
 
-  tags = {
-    Project = var.project
-    Role    = "k8s-worker-ami-builder"
-  }
+  tags = merge(local.common_tags, {
+    Role = "k8s-ami-builder"
+  })
 }
 
-module "k8s_golden_ami_builder_control_plane" {
-  source = "../../modules/k8s-golden-ami-builder"
-
-  name_prefix = "${local.name_prefix}-k8s-cp"
-  environment = local.environment
-  vpc_id      = data.aws_ssm_parameter.vpc_id.value
-
-  subnet_id = data.aws_subnet.alb_public_a.id
-
-  instance_type     = var.ami_builder_instance_type
-  ssh_key_name      = var.ssh_key_name
-  allowed_ssh_cidrs = var.ami_builder_allowed_ssh_cidrs
-
-  enable_proxy     = false
-  proxy_private_ip = null
-  proxy_port       = var.egress_proxy_port
-
-  k8s_minor_version = var.k8s_minor_version
-  helm_version      = var.helm_version
-  pause_image       = var.pause_image
-
-  tags = {
-    Project = var.project
-    Role    = "k8s-control-plane-ami-builder"
-  }
-}
-
-output "ami_builder_worker_instance_id" {
-  value       = module.k8s_golden_ami_builder_worker.instance_id
-  description = "Worker golden AMI sample instance id"
-}
-
-output "ami_builder_control_plane_instance_id" {
-  value       = module.k8s_golden_ami_builder_control_plane.instance_id
-  description = "Control plane golden AMI sample instance id"
+output "ami_builder_instance_id" {
+  value       = module.k8s_golden_ami_builder.instance_id
+  description = "Golden AMI builder instance id"
 }

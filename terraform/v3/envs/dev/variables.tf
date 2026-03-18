@@ -54,9 +54,27 @@ variable "workers_max" {
   default = 3
 }
 
+variable "cluster_name" {
+  description = "Kubernetes cluster name (used by cluster-autoscaler)"
+  type        = string
+  default     = "scuad-cluster"
+}
+
+variable "enable_cluster_autoscaler" {
+  description = "Enable cluster-autoscaler integration (ASG tags + IAM on worker role)"
+  type        = bool
+  default     = false
+}
+
 variable "worker_instance_type" {
   type    = string
   default = "t3.medium"
+}
+
+variable "worker_ami_id" {
+  description = "Worker node AMI override (optional). If null, Ubuntu 24.04 AMI from SSM is used."
+  type        = string
+  default     = null
 }
 
 variable "ssh_key_name" {
@@ -66,9 +84,25 @@ variable "ssh_key_name" {
 }
 
 variable "worker_user_data" {
-  description = "cloud-init/user-data for worker nodes (kubeadm join etc.)"
+  description = "Optional override user-data for worker nodes. If null, the kubeadm auto-join template is used."
   type        = string
-  default     = "#!/bin/bash\nset -euxo pipefail\n# TODO: install container runtime + kubelet/kubeadm and run kubeadm join\n"
+  default     = null
+}
+
+variable "kubeadm_join_token_ssm_param_name" {
+  description = "SSM parameter name containing kubeadm join token"
+  type        = string
+}
+
+variable "kubeadm_ca_hash_ssm_param_name" {
+  description = "SSM parameter name containing discovery-token-ca-cert-hash"
+  type        = string
+}
+
+variable "kubeadm_control_plane_endpoint" {
+  description = "Kubeadm control plane endpoint (DNS/IP without scheme). Typically NLB DNS name."
+  type        = string
+  default     = null
 }
 
 variable "egress_proxy_instance_type" {
@@ -110,6 +144,12 @@ variable "ami_builder_allowed_ssh_cidrs" {
   default     = []
 }
 
+variable "ami_builder_enable_proxy" {
+  description = "Whether golden AMI builder instances should use the egress proxy"
+  type        = bool
+  default     = true
+}
+
 variable "k8s_minor_version" {
   description = "Kubernetes stable channel used by pkgs.k8s.io (e.g. v1.29, v1.30)"
   type        = string
@@ -125,4 +165,36 @@ variable "helm_version" {
 variable "pause_image" {
   description = "ECR mirrored pause image"
   type        = string
+}
+
+# -------------------------
+# Control plane (kubeadm)
+# -------------------------
+variable "control_plane_ami_id" {
+  description = "AMI id for the control plane instance"
+  type        = string
+}
+
+variable "control_plane_instance_type" {
+  description = "EC2 instance type for the control plane instance"
+  type        = string
+  default     = "t3.medium"
+}
+
+variable "control_plane_replicas" {
+  description = "Number of control plane instances (dev default: 1)"
+  type        = number
+  default     = 1
+}
+
+variable "control_plane_user_data" {
+  description = "cloud-init/user-data for control plane (kubeadm init etc.)"
+  type        = string
+  default     = "#!/bin/bash\nset -euxo pipefail\n# TODO: install container runtime + kubelet/kubeadm and run kubeadm init\n"
+}
+
+variable "control_plane_allowed_api_cidrs" {
+  description = "CIDRs allowed to reach kube-apiserver (6443). Should include worker subnet CIDRs."
+  type        = list(string)
+  default     = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
 }
