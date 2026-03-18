@@ -1,0 +1,131 @@
+# AWS Cloud Controller Manager (external cloud provider)
+#
+# Prereqs (kubeadm self-managed):
+# - kubelet config.yaml on ALL nodes: cloudProvider: external
+# - kube-controller-manager manifest includes: --cloud-provider=external
+# - Nodes running this pod must have IAM permissions for AWS APIs (EC2 at minimum).
+# - If nodes are in private subnets without NAT, provide proxy env or VPC endpoints.
+#
+# Apply:
+#   kubectl apply -f aws-cloud-controller-manager.yaml
+# Verify:
+#   kubectl -n kube-system get pods -l app=aws-cloud-controller-manager -o wide
+#   kubectl -n kube-system logs deploy/aws-cloud-controller-manager --tail=200
+#   kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"  "}{.spec.providerID}{"\n"}{end}'
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aws-cloud-controller-manager
+  namespace: kube-system
+  labels:
+    app: aws-cloud-controller-manager
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: aws-cloud-controller-manager
+  labels:
+    app: aws-cloud-controller-manager
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/status", "services", "services/status", "endpoints", "events", "persistentvolumes", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update", "patch", "create"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["create", "get", "list", "watch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["create", "get", "list", "watch", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: aws-cloud-controller-manager
+  labels:
+    app: aws-cloud-controller-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aws-cloud-controller-manager
+subjects:
+  - kind: ServiceAccount
+    name: aws-cloud-controller-manager
+    namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: aws-cloud-controller-manager-extension-apiserver-authentication-reader
+  namespace: kube-system
+  labels:
+    app: aws-cloud-controller-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+  - kind: ServiceAccount
+    name: aws-cloud-controller-manager
+    namespace: kube-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aws-cloud-controller-manager
+  namespace: kube-system
+  labels:
+    app: aws-cloud-controller-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aws-cloud-controller-manager
+  template:
+    metadata:
+      labels:
+        app: aws-cloud-controller-manager
+    spec:
+      serviceAccountName: aws-cloud-controller-manager
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      priorityClassName: system-cluster-critical
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "NoSchedule"
+        - key: "node-role.kubernetes.io/master"
+          operator: "Exists"
+          effect: "NoSchedule"
+      containers:
+        - name: aws-cloud-controller-manager
+          image: registry.k8s.io/provider-aws/cloud-controller-manager:v1.29.3
+          imagePullPolicy: IfNotPresent
+          args:
+            - --cloud-provider=aws
+            - --leader-elect=true
+            - --use-service-account-credentials=true
+            - --cluster-name=scuad-dev-cluster
+            - --configure-cloud-routes=false
+            - --v=2
+          env:
+            # If you rely on squid egress proxy (no NAT), keep these.
+            - name: HTTP_PROXY
+              value: "http://10.4.0.149:3128"
+            - name: HTTPS_PROXY
+              value: "http://10.4.0.149:3128"
+            - name: NO_PROXY
+              value: "127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,169.254.169.254,.cluster.local"
+            - name: http_proxy
+              value: "http://10.4.0.149:3128"
+            - name: https_proxy
+              value: "http://10.4.0.149:3128"
+            - name: no_proxy
+              value: "127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,169.254.169.254,.cluster.local"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 200Mi
+            limits:
+              cpu: 500m
+              memory: 600Mi
