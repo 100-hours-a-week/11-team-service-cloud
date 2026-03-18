@@ -50,62 +50,106 @@ resource "aws_security_group" "proxy" {
   })
 }
 
+# IAM role for SSM (so we can reach the proxy without opening SSH)
+resource "aws_iam_role" "ssm" {
+  name = "${var.name_prefix}-egress-proxy-ssm-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = merge(local.base_tags, {
+    Name = "${var.name_prefix}-egress-proxy-ssm-role"
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ssm" {
+  role       = aws_iam_role.ssm.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "ssm" {
+  name = "${var.name_prefix}-egress-proxy-profile"
+  role = aws_iam_role.ssm.name
+
+  tags = merge(local.base_tags, {
+    Name = "${var.name_prefix}-egress-proxy-profile"
+  })
+}
+
 resource "aws_instance" "proxy" {
   ami                    = local.effective_ami_id
   instance_type          = var.instance_type
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.proxy.id]
 
+  iam_instance_profile = aws_iam_instance_profile.ssm.name
+
   associate_public_ip_address = true
   key_name                    = var.ssh_key_name
 
   user_data = <<-EOF
-    #!/bin/bash
-    set -euxo pipefail
-    exec > >(tee -a /var/log/user-data.log) 2>&1
+#!/bin/bash
+set -euo pipefail
+exec > /var/log/user-data.log 2>&1
+set -x
 
-    export DEBIAN_FRONTEND=noninteractive
+export DEBIAN_FRONTEND=noninteractive
 
-    apt-get update
-    apt-get install -y squid
+apt-get update
+apt-get install -y squid snapd
 
-    cat >/etc/squid/squid.conf <<CONF
-    http_port ${var.proxy_port}
+# Install + start SSM agent (snap)
+systemctl enable --now snapd || true
+snap install amazon-ssm-agent --classic || true
+systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service || true
 
-    # Client allowlist
-    acl allowed_vpc src ${data.aws_vpc.this.cidr_block}
+cat >/etc/squid/squid.conf <<CONF
+http_port ${var.proxy_port}
 
-%{if var.allow_all}
-    # Destination: allow ALL
-%{else}
-    # Destination allowlist (domains)
-    acl allowed_domains dstdomain ${join(" ", var.allowed_domains)}
-%{endif}
-
-    # Ports hardening
-    acl SSL_ports port 443
-    acl Safe_ports port 80 443
-    http_access deny !Safe_ports
-    http_access deny CONNECT !SSL_ports
+# Client allowlist
+acl allowed_vpc src ${data.aws_vpc.this.cidr_block}
 
 %{if var.allow_all}
-    http_access allow allowed_vpc
+# Destination: allow ALL
 %{else}
-    http_access allow allowed_vpc allowed_domains
+# Destination allowlist (domains)
+acl allowed_domains dstdomain ${join(" ", var.allowed_domains)}
 %{endif}
 
-    http_access deny all
+# Ports hardening
+acl SSL_ports port 443
+acl Safe_ports port 80 443
+http_access deny !Safe_ports
+http_access deny CONNECT !SSL_ports
 
-    forwarded_for delete
-    via off
+%{if var.allow_all}
+http_access allow allowed_vpc
+%{else}
+http_access allow allowed_vpc allowed_domains
+%{endif}
 
-    access_log /var/log/squid/access.log
-    cache_log /var/log/squid/cache.log
-    CONF
+http_access deny all
 
-    systemctl enable --now squid
-    systemctl restart squid
-  EOF
+forwarded_for delete
+via off
+
+access_log /var/log/squid/access.log
+cache_log /var/log/squid/cache.log
+CONF
+
+systemctl enable --now squid
+systemctl restart squid
+EOF
 
   tags = merge(local.base_tags, {
     Name = "${var.name_prefix}-egress-proxy"

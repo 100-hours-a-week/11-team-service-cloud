@@ -45,16 +45,9 @@ resource "aws_security_group" "workers" {
   description = "Kubernetes worker nodes"
   vpc_id      = var.vpc_id
 
-  # ALB -> NodePort
-  ingress {
-    description     = "NodePort from ALB"
-    from_port       = var.nodeport_http
-    to_port         = var.nodeport_http
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
+  # NOTE: Manage ingress rules via aws_security_group_rule resources to avoid
+  # conflicts/drift with additional rules created elsewhere (Calico, kubelet, etc.).
 
-  # TODO: extend to allow cluster internal traffic as needed.
   egress {
     from_port   = 0
     to_port     = 0
@@ -65,6 +58,19 @@ resource "aws_security_group" "workers" {
   tags = merge(local.base_tags, {
     Name = "${var.name_prefix}-workers-sg"
   })
+}
+
+# ALB -> Worker NodePort
+resource "aws_security_group_rule" "workers_nodeport_from_alb" {
+  type              = "ingress"
+  security_group_id = aws_security_group.workers.id
+
+  protocol  = "tcp"
+  from_port = var.nodeport_http
+  to_port   = var.nodeport_http
+
+  source_security_group_id = aws_security_group.alb.id
+  description              = "NodePort from ALB"
 }
 
 # --------------------------------------
@@ -138,21 +144,144 @@ resource "aws_lb_listener" "https" {
 # --------------------------------------
 # Worker Nodes ASG
 # --------------------------------------
+# Ubuntu 24.04 AMI via SSM Parameter (region-safe)
 data "aws_ssm_parameter" "ubuntu_2404_ami" {
   name = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
 }
 
+locals {
+  effective_worker_ami_id = var.worker_ami_id != null ? var.worker_ami_id : data.aws_ssm_parameter.ubuntu_2404_ami.value
+
+  effective_worker_user_data = var.worker_user_data != null ? var.worker_user_data : templatefile("${path.module}/worker_join_user_data.sh.tftpl", {
+    control_plane_endpoint            = var.control_plane_endpoint
+    kubeadm_join_token_ssm_param_name = var.kubeadm_join_token_ssm_param_name
+    kubeadm_ca_hash_ssm_param_name    = var.kubeadm_ca_hash_ssm_param_name
+    http_proxy                        = var.http_proxy
+    https_proxy                       = var.https_proxy
+    no_proxy                          = var.no_proxy
+  })
+}
+
+data "aws_region" "current" {}
+
+data "aws_caller_identity" "current" {}
+
+# Worker IAM role (SSM + read join params)
+resource "aws_iam_role" "workers" {
+  name = "${var.name_prefix}-workers-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = merge(local.base_tags, {
+    Name = "${var.name_prefix}-workers-role"
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "workers_ssm" {
+  role       = aws_iam_role.workers.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+# Allow worker nodes to pull images from private ECR repositories
+resource "aws_iam_role_policy_attachment" "workers_ecr_readonly" {
+  role       = aws_iam_role.workers.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+resource "aws_iam_role_policy" "workers_read_join_params" {
+  name = "${var.name_prefix}-workers-read-join-params"
+  role = aws_iam_role.workers.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = ["ssm:GetParameter", "ssm:GetParameters"]
+        Resource = compact([
+          var.kubeadm_join_token_ssm_param_name != null ? "arn:aws:ssm:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:parameter${var.kubeadm_join_token_ssm_param_name}" : null,
+          var.kubeadm_ca_hash_ssm_param_name != null ? "arn:aws:ssm:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:parameter${var.kubeadm_ca_hash_ssm_param_name}" : null
+        ])
+      }
+    ]
+  })
+}
+
+# Cluster Autoscaler permissions (when running autoscaler on nodes with this instance profile)
+resource "aws_iam_role_policy" "workers_cluster_autoscaler" {
+  count = var.enable_cluster_autoscaler ? 1 : 0
+
+  name = "${var.name_prefix}-workers-cluster-autoscaler"
+  role = aws_iam_role.workers.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "autoscaling:DescribeAutoScalingGroups",
+          "autoscaling:DescribeAutoScalingInstances",
+          "autoscaling:DescribeLaunchConfigurations",
+          "autoscaling:DescribeScalingActivities",
+          "autoscaling:SetDesiredCapacity",
+          "autoscaling:TerminateInstanceInAutoScalingGroup",
+          "ec2:DescribeLaunchTemplateVersions",
+          "ec2:DescribeInstanceTypes",
+          "ec2:DescribeInstances",
+          "ec2:DescribeTags"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_instance_profile" "workers" {
+  name = "${var.name_prefix}-workers-profile"
+  role = aws_iam_role.workers.name
+
+  tags = merge(local.base_tags, {
+    Name = "${var.name_prefix}-workers-profile"
+  })
+}
+
 resource "aws_launch_template" "workers" {
   name_prefix   = "${var.name_prefix}-workers-"
-  image_id      = data.aws_ssm_parameter.ubuntu_2404_ami.value
+  image_id      = local.effective_worker_ami_id
   instance_type = var.worker_instance_type
 
   key_name = var.ssh_key_name
 
+  iam_instance_profile {
+    name = aws_iam_instance_profile.workers.name
+  }
+
   vpc_security_group_ids = [aws_security_group.workers.id]
 
-  # NOTE: kubeadm join automation should be added here.
-  user_data = base64encode(var.worker_user_data)
+  # Root EBS volume size
+  block_device_mappings {
+    device_name = "/dev/sda1"
+
+    ebs {
+      volume_size           = var.worker_root_volume_size_gb
+      volume_type           = "gp3"
+      delete_on_termination = true
+    }
+  }
+
+  user_data = base64encode(local.effective_worker_user_data)
 
   tag_specifications {
     resource_type = "instance"
@@ -178,6 +307,18 @@ resource "aws_autoscaling_group" "workers" {
     version = "$Latest"
   }
 
+  # Automatically roll instances when the launch template changes.
+  instance_refresh {
+    strategy = "Rolling"
+
+    preferences {
+      min_healthy_percentage = 50
+      instance_warmup        = 120
+    }
+
+    # triggers omitted (launch_template changes already trigger refresh)
+  }
+
   # Attach target group so instances are auto-registered/de-registered
   target_group_arns = [aws_lb_target_group.workers_nodeport.arn]
 
@@ -185,5 +326,23 @@ resource "aws_autoscaling_group" "workers" {
     key                 = "Name"
     value               = "${var.name_prefix}-worker"
     propagate_at_launch = true
+  }
+
+  dynamic "tag" {
+    for_each = var.enable_cluster_autoscaler && var.cluster_name != null ? [1] : []
+    content {
+      key                 = "k8s.io/cluster-autoscaler/enabled"
+      value               = "true"
+      propagate_at_launch = true
+    }
+  }
+
+  dynamic "tag" {
+    for_each = var.enable_cluster_autoscaler && var.cluster_name != null ? [1] : []
+    content {
+      key                 = "k8s.io/cluster-autoscaler/${var.cluster_name}"
+      value               = "owned"
+      propagate_at_launch = true
+    }
   }
 }
