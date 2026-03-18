@@ -93,7 +93,8 @@ module "egress_proxy" {
   name_prefix = local.name_prefix
   environment = local.environment
   vpc_id      = data.aws_ssm_parameter.vpc_id.value
-  subnet_id   = data.aws_subnet.alb_public_a.id
+  subnet_ids  = [data.aws_subnet.alb_public_a.id, data.aws_subnet.alb_public_b.id]
+  enable_nlb  = true
 
   instance_type   = var.egress_proxy_instance_type
   proxy_port      = var.egress_proxy_port

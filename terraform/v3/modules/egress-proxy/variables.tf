@@ -14,8 +14,21 @@ variable "vpc_id" {
 }
 
 variable "subnet_id" {
-  description = "Public subnet id where the proxy instance will be placed"
+  description = "(Deprecated) Public subnet id where the proxy instance will be placed. Prefer subnet_ids."
   type        = string
+  default     = null
+}
+
+variable "subnet_ids" {
+  description = "Public subnet ids where proxy instances will be placed (one per subnet). If null, subnet_id is used."
+  type        = list(string)
+  default     = null
+}
+
+variable "enable_nlb" {
+  description = "If true, create an internal NLB endpoint in front of the proxy instances. If false, only instances are created."
+  type        = bool
+  default     = false
 }
 
 variable "instance_type" {
