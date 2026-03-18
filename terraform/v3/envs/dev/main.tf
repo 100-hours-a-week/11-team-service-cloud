@@ -57,6 +57,90 @@ data "aws_subnet" "workers_b" {
   }
 }
 
+# Private data subnets (for RDS/Redis/RabbitMQ/Weaviate)
+data "aws_subnet" "data_a" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_ssm_parameter.vpc_id.value]
+  }
+
+  filter {
+    name   = "tag:Name"
+    values = ["dev-private-data-a"]
+  }
+}
+
+data "aws_subnet" "data_b" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_ssm_parameter.vpc_id.value]
+  }
+
+  filter {
+    name   = "tag:Name"
+    values = ["dev-private-data-b"]
+  }
+}
+
+module "kubeadm_control_plane" {
+  source = "../../modules/kubeadm-control-plane-nodes"
+
+  name_prefix = local.name_prefix
+  environment = local.environment
+
+  vpc_id     = data.aws_ssm_parameter.vpc_id.value
+  subnet_ids = [data.aws_subnet.workers_a.id, data.aws_subnet.workers_b.id]
+  replicas   = var.control_plane_replicas
+
+  ami_id        = var.control_plane_ami_id
+  instance_type = var.control_plane_instance_type
+
+  ssh_key_name      = var.ssh_key_name
+  allowed_ssh_cidrs = var.ami_builder_allowed_ssh_cidrs
+
+  allowed_api_cidrs       = var.control_plane_allowed_api_cidrs
+  control_plane_user_data = var.control_plane_user_data
+
+  # Allow CP to publish kubeadm join materials into SSM Parameter Store (optional)
+  ssm_put_parameter_names = [
+    var.kubeadm_join_token_ssm_param_name,
+    var.kubeadm_ca_hash_ssm_param_name,
+    var.kubeadm_control_plane_endpoint,
+  ]
+
+  tags = local.common_tags
+}
+
+output "control_plane_instance_ids" {
+  value       = module.kubeadm_control_plane.instance_ids
+  description = "Control plane instance ids"
+}
+
+output "control_plane_private_ips" {
+  value       = module.kubeadm_control_plane.private_ips
+  description = "Control plane private IPs"
+}
+
+module "kubeadm_control_plane_public_endpoint" {
+  source = "../../modules/kubeadm-control-plane-endpoint-nlb"
+
+  name_prefix = local.name_prefix
+  environment = local.environment
+
+  vpc_id     = data.aws_ssm_parameter.vpc_id.value
+  subnet_ids = [data.aws_subnet.alb_public_a.id, data.aws_subnet.alb_public_b.id]
+  internal   = false
+
+  target_instance_ids = module.kubeadm_control_plane.instance_ids
+
+  tags = local.common_tags
+}
+
+output "control_plane_public_endpoint" {
+  value       = module.kubeadm_control_plane_public_endpoint.dns_name
+  description = "Public NLB DNS name for kube-apiserver (6443). Restrict access in SG via allowlist."
+}
+
 module "kubeadm_public_alb_workers" {
   source = "../../modules/kubeadm-alb-asg"
 

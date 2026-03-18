@@ -21,6 +21,12 @@ variable "alb_certificate_arn" {
   type        = string
 }
 
+variable "db_password" {
+  description = "RDS MySQL master password (dev)"
+  type        = string
+  sensitive   = true
+}
+
 variable "nodeport_http" {
   description = "NodePort used by ingress-nginx (HTTP)"
   type        = number
