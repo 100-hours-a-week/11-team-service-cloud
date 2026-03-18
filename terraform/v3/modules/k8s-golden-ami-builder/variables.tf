@@ -74,7 +74,7 @@ variable "pause_image" {
 variable "no_proxy" {
   description = "NO_PROXY value"
   type        = string
-  default     = "127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,169.254.169.254,.cluster.local"
+  default     = "127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,169.254.169.254,.cluster.local,.amazonaws.com,.ecr.ap-northeast-2.amazonaws.com,.dkr.ecr.ap-northeast-2.amazonaws.com,.s3.ap-northeast-2.amazonaws.com"
 }
 
 variable "ami_id" {
