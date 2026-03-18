@@ -1433,7 +1433,7 @@ resource "aws_iam_instance_profile" "monitoring" {
 # ── Monitoring EBS ───────────────────────────────────────────────
 resource "aws_ebs_volume" "monitoring_data" {
   availability_zone = "ap-northeast-2a"
-  size              = 20
+  size              = 21
   type              = "gp3"
 
   tags = {
