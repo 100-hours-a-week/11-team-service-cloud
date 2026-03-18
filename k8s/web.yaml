@@ -16,6 +16,8 @@ spec:
       labels:
         app: web
     spec:
+      imagePullSecrets:
+        - name: ecr-secret
       containers:
         - name: web
           image: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend:develop-latest

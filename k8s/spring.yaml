@@ -16,6 +16,8 @@ spec:
       labels:
         app: spring-app
     spec:
+      imagePullSecrets:
+        - name: ecr-secret
       containers:
         - name: spring-app
           image: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-backend:develop-latest
