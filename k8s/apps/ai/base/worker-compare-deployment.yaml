@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-worker-compare
+  labels:
+    app: ai-worker-compare
+    tier: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-worker-compare
+  template:
+    metadata:
+      labels:
+        app: ai-worker-compare
+        tier: worker
+    spec:
+      containers:
+        - name: worker-compare
+          image: scuad-ai-worker-compare:latest
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: ai-shared-secret
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"

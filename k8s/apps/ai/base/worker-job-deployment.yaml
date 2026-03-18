@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-worker-job
+  labels:
+    app: ai-worker-job
+    tier: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-worker-job
+  template:
+    metadata:
+      labels:
+        app: ai-worker-job
+        tier: worker
+    spec:
+      containers:
+        - name: worker-job
+          image: scuad-ai-worker-job:latest
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: ai-shared-secret
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"

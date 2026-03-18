@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+namespace: dev
+
+images:
+  - name: scuad-backend:latest
+    newName: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-backend
+    newTag: develop-latest
+
+patches:
+  - target:
+      kind: Deployment
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: spring-app
+      spec:
+        replicas: 1
+        template:
+          spec:
+            imagePullSecrets:
+              - name: ecr-secret
+            containers:
+              - name: spring-app
+                resources:
+                  requests:
+                    cpu: "200m"
+                    memory: "384Mi"
+                  limits:
+                    cpu: "500m"
+                    memory: "512Mi"

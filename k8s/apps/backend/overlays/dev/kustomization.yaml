@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+namespace: dev
+
+images:
+  - name: scuad-backend:latest
+    newName: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-backend
+    newTag: develop-latest

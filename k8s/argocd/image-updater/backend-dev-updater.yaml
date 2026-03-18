@@ -1,0 +1,20 @@
+apiVersion: argocd-image-updater.argoproj.io/v1alpha1
+kind: ImageUpdater
+metadata:
+  name: spring-app-dev-updater
+  namespace: argocd
+spec:
+  writeBackConfig:
+    method: "git"
+    gitConfig:
+      branch: "develop"
+      writeBackTarget: "kustomization"
+  applicationRefs:
+    - namePattern: "spring-app-dev"
+      images:
+        - alias: "backend"
+          imageName: "209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-backend"
+          commonUpdateSettings:
+            updateStrategy: "newest-build"
+            allowTags: "regexp:^develop-"
+            pullSecret: "pullsecret:argocd/ecr-secret"
