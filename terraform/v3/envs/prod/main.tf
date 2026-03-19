@@ -86,30 +86,73 @@ module "kubeadm_control_plane" {
   name_prefix = local.name_prefix
   environment = local.environment
 
-  vpc_id              = data.aws_ssm_parameter.vpc_id.value
-  public_subnet_ids   = [data.aws_subnet.alb_public_a.id, data.aws_subnet.alb_public_b.id]
-  worker_subnet_ids   = [data.aws_subnet.workers_a.id, data.aws_subnet.workers_b.id]
-  alb_certificate_arn = var.alb_certificate_arn
+  vpc_id     = data.aws_ssm_parameter.vpc_id.value
+  subnet_ids = [data.aws_subnet.workers_a.id, data.aws_subnet.workers_b.id]
+  replicas   = var.control_plane_replicas
 
-  nodeport_http     = var.nodeport_http
-  health_check_path = var.health_check_path
+  ami_id        = var.control_plane_ami_id
+  instance_type = var.control_plane_instance_type
 
-  workers_min          = var.workers_min
-  workers_desired      = var.workers_desired
-  workers_max          = var.workers_max
-  worker_instance_type = var.worker_instance_type
+  ssh_key_name      = var.ssh_key_name
+  allowed_ssh_cidrs = []
 
-  ssh_key_name     = var.ssh_key_name
-  worker_user_data = var.worker_user_data
+  allowed_api_cidrs = var.control_plane_allowed_api_cidrs
+  control_plane_user_data = templatefile("${path.module}/control-plane-user-data.sh.tftpl", {
+    region                                        = "ap-northeast-2"
+    control_plane_endpoint                        = module.kubeadm_control_plane_endpoint.dns_name
+    kubeadm_control_plane_endpoint_ssm_param_name = var.kubeadm_control_plane_endpoint_ssm_param_name
+    kubeadm_join_token_ssm_param_name             = var.kubeadm_join_token_ssm_param_name
+    kubeadm_ca_hash_ssm_param_name                = var.kubeadm_ca_hash_ssm_param_name
+
+    http_proxy  = "http://${module.egress_proxy.endpoint_dns_name}:${var.egress_proxy_port}"
+    https_proxy = "http://${module.egress_proxy.endpoint_dns_name}:${var.egress_proxy_port}"
+    no_proxy    = local.no_proxy
+
+    sandbox_image = "registry.k8s.io/pause:3.10"
+  })
+
+  # Allow CP to publish kubeadm join materials into SSM Parameter Store (optional)
+  ssm_put_parameter_names = [
+    var.kubeadm_control_plane_endpoint_ssm_param_name,
+    var.kubeadm_join_token_ssm_param_name,
+    var.kubeadm_ca_hash_ssm_param_name,
+  ]
 
   tags = {
     Project = var.project
   }
 }
 
-output "alb_dns_name" {
-  value       = module.kubeadm_public_alb_workers.alb_dns_name
-  description = "Public ALB DNS"
+module "kubeadm_control_plane_endpoint" {
+  source = "../../modules/kubeadm-control-plane-endpoint-nlb"
+
+  name_prefix = local.name_prefix
+  environment = local.environment
+
+  vpc_id     = data.aws_ssm_parameter.vpc_id.value
+  subnet_ids = [data.aws_subnet.workers_a.id, data.aws_subnet.workers_b.id]
+  internal   = true
+
+  target_instance_ids = module.kubeadm_control_plane.instance_ids
+
+  tags = {
+    Project = var.project
+  }
+}
+
+output "control_plane_instance_ids" {
+  value       = module.kubeadm_control_plane.instance_ids
+  description = "Control plane instance ids"
+}
+
+output "control_plane_private_ips" {
+  value       = module.kubeadm_control_plane.private_ips
+  description = "Control plane private IPs"
+}
+
+output "control_plane_internal_endpoint" {
+  value       = module.kubeadm_control_plane_endpoint.dns_name
+  description = "Internal NLB DNS name for kube-apiserver (6443)"
 }
 
 module "egress_proxy" {

@@ -88,6 +88,12 @@ variable "kubeadm_ca_hash_ssm_param_name" {
   default     = null
 }
 
+variable "kubeadm_control_plane_endpoint_ssm_param_name" {
+  description = "SSM parameter name containing kubeadm control plane endpoint (DNS/IP:6443). If set, worker join will read the endpoint from SSM instead of using control_plane_endpoint."
+  type        = string
+  default     = null
+}
+
 variable "http_proxy" {
   description = "Optional HTTP proxy for worker bootstrap"
   type        = string

@@ -64,6 +64,44 @@ variable "worker_instance_type" {
   default = "t3.medium"
 }
 
+variable "worker_ami_id" {
+  description = "Worker node AMI override (optional). If null, Ubuntu 24.04 AMI from SSM is used."
+  type        = string
+  default     = null
+}
+
+# -------------------------
+# Control plane (kubeadm)
+# -------------------------
+variable "control_plane_ami_id" {
+  description = "AMI id for the control plane instances"
+  type        = string
+}
+
+variable "control_plane_instance_type" {
+  description = "EC2 instance type for control plane"
+  type        = string
+  default     = "t3.medium"
+}
+
+variable "control_plane_replicas" {
+  description = "Number of control plane instances"
+  type        = number
+  default     = 3
+}
+
+variable "control_plane_user_data" {
+  description = "cloud-init/user-data for control plane (kubeadm init/join etc.)"
+  type        = string
+  default     = "#!/bin/bash\nset -euxo pipefail\n# TODO: install container runtime + kubelet/kubeadm and run kubeadm init/join\n"
+}
+
+variable "control_plane_allowed_api_cidrs" {
+  description = "CIDRs allowed to reach kube-apiserver (6443). For SSM-only access, restrict to VPC CIDR(s)."
+  type        = list(string)
+  default     = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+}
+
 variable "ssh_key_name" {
   description = "EC2 key pair name for SSH (optional)"
   type        = string

@@ -153,12 +153,13 @@ locals {
   effective_worker_ami_id = var.worker_ami_id != null ? var.worker_ami_id : data.aws_ssm_parameter.ubuntu_2404_ami.value
 
   effective_worker_user_data = var.worker_user_data != null ? var.worker_user_data : templatefile("${path.module}/worker_join_user_data.sh.tftpl", {
-    control_plane_endpoint            = var.control_plane_endpoint
-    kubeadm_join_token_ssm_param_name = var.kubeadm_join_token_ssm_param_name
-    kubeadm_ca_hash_ssm_param_name    = var.kubeadm_ca_hash_ssm_param_name
-    http_proxy                        = var.http_proxy
-    https_proxy                       = var.https_proxy
-    no_proxy                          = var.no_proxy
+    control_plane_endpoint                        = var.control_plane_endpoint
+    kubeadm_join_token_ssm_param_name             = var.kubeadm_join_token_ssm_param_name
+    kubeadm_ca_hash_ssm_param_name                = var.kubeadm_ca_hash_ssm_param_name
+    kubeadm_control_plane_endpoint_ssm_param_name = var.kubeadm_control_plane_endpoint_ssm_param_name
+    http_proxy                                    = var.http_proxy
+    https_proxy                                   = var.https_proxy
+    no_proxy                                      = var.no_proxy
   })
 }
 
