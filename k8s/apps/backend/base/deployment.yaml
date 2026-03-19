@@ -5,7 +5,7 @@ metadata:
   labels:
     app: spring-app
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: spring-app
@@ -33,7 +33,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /actuator/health
-              port: 8080
+              port: 9101
             initialDelaySeconds: 60
             periodSeconds: 30
             failureThreshold: 3
