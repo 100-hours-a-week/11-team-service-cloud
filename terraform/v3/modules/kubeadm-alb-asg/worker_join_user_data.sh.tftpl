@@ -4,7 +4,6 @@ exec > /var/log/k8s-worker-bootstrap.log 2>&1
 set -x
 
 REGION="ap-northeast-2"
-SSM_PREFIX="/scuad/v3/dev/kubeadm"
 CRI_SOCKET="unix:///run/containerd/containerd.sock"
 
 PRIVATE_IP="$(hostname -I | awk '{print $1}')"
@@ -29,10 +28,29 @@ cat >/etc/default/kubelet <<EOF
 KUBELET_EXTRA_ARGS=--node-ip=$${PRIVATE_IP} --provider-id=aws:///$${AZ}/$${INSTANCE_ID}
 EOF
 
+# Proxy settings for containerd + kubelet (systemd drop-ins)
+mkdir -p /etc/systemd/system/containerd.service.d /etc/systemd/system/kubelet.service.d
+
+cat >/etc/systemd/system/containerd.service.d/proxy.conf <<EOF
+[Service]
+Environment="HTTP_PROXY=${http_proxy}"
+Environment="HTTPS_PROXY=${https_proxy}"
+Environment="NO_PROXY=${no_proxy}"
+EOF
+
+cat >/etc/systemd/system/kubelet.service.d/proxy.conf <<EOF
+[Service]
+Environment="HTTP_PROXY=${http_proxy}"
+Environment="HTTPS_PROXY=${https_proxy}"
+Environment="NO_PROXY=${no_proxy}"
+EOF
+
 # containerd sandbox image 고정
-if [ -f /etc/containerd/config.toml ]; then
-  sed -i 's#sandbox_image = ".*"#sandbox_image = "registry.k8s.io/pause:3.10"#' /etc/containerd/config.toml
+if [ ! -f /etc/containerd/config.toml ]; then
+  mkdir -p /etc/containerd
+  containerd config default >/etc/containerd/config.toml
 fi
+sed -i 's#sandbox_image = ".*"#sandbox_image = "registry.k8s.io/pause:3.10"#' /etc/containerd/config.toml
 
 systemctl daemon-reload
 
@@ -49,6 +67,19 @@ for i in $(seq 1 30); do
 done
 
 # kubelet 준비
+# Some AMIs/systemd units require /var/lib/kubelet/config.yaml to exist.
+mkdir -p /var/lib/kubelet
+if [ ! -f /var/lib/kubelet/config.yaml ]; then
+  cat >/var/lib/kubelet/config.yaml <<'YAML'
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+cgroupDriver: systemd
+clusterDomain: cluster.local
+clusterDNS:
+  - 10.96.0.10
+YAML
+fi
+
 systemctl enable kubelet
 systemctl restart kubelet
 
@@ -61,22 +92,27 @@ for i in $(seq 1 30); do
 done
 
 # join 정보 조회
+# Prefer reading the control plane endpoint from SSM (lets us switch between NLB and cp0 IP without rebuilding nodes).
+%{ if kubeadm_control_plane_endpoint_ssm_param_name != null }
 CONTROL_PLANE_ENDPOINT="$(aws ssm get-parameter \
   --region "$REGION" \
-  --name "$${SSM_PREFIX}/control_plane_endpoint" \
+  --name "${kubeadm_control_plane_endpoint_ssm_param_name}" \
   --query 'Parameter.Value' \
   --output text)"
+%{ else }
+CONTROL_PLANE_ENDPOINT="${control_plane_endpoint}:6443"
+%{ endif }
 
 JOIN_TOKEN="$(aws ssm get-parameter \
   --region "$REGION" \
-  --name "$${SSM_PREFIX}/join_token" \
+  --name "${kubeadm_join_token_ssm_param_name}" \
   --with-decryption \
   --query 'Parameter.Value' \
   --output text)"
 
 CA_CERT_HASH="$(aws ssm get-parameter \
   --region "$REGION" \
-  --name "$${SSM_PREFIX}/ca_cert_hash" \
+  --name "${kubeadm_ca_hash_ssm_param_name}" \
   --with-decryption \
   --query 'Parameter.Value' \
   --output text)"

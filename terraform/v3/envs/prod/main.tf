@@ -185,6 +185,53 @@ output "egress_proxy_private_ip" {
   value       = module.egress_proxy.private_ip
   description = "Private IP of egress proxy"
 }
+
+module "kubeadm_public_alb_workers" {
+  source = "../../modules/kubeadm-alb-asg"
+
+  name_prefix = local.name_prefix
+  environment = local.environment
+
+  vpc_id              = data.aws_ssm_parameter.vpc_id.value
+  public_subnet_ids   = [data.aws_subnet.alb_public_a.id, data.aws_subnet.alb_public_b.id]
+  worker_subnet_ids   = [data.aws_subnet.workers_a.id, data.aws_subnet.workers_b.id]
+  alb_certificate_arn = var.alb_certificate_arn
+
+  nodeport_http     = var.nodeport_http
+  health_check_path = var.health_check_path
+
+  workers_min          = var.workers_min
+  workers_desired      = var.workers_desired
+  workers_max          = var.workers_max
+  worker_instance_type = var.worker_instance_type
+  worker_ami_id        = var.worker_ami_id
+
+  ssh_key_name     = var.ssh_key_name
+  worker_user_data = var.worker_user_data
+
+  control_plane_endpoint                        = coalesce(var.kubeadm_control_plane_endpoint, module.kubeadm_control_plane_endpoint.dns_name)
+  kubeadm_join_token_ssm_param_name             = var.kubeadm_join_token_ssm_param_name
+  kubeadm_ca_hash_ssm_param_name                = var.kubeadm_ca_hash_ssm_param_name
+  kubeadm_control_plane_endpoint_ssm_param_name = var.kubeadm_control_plane_endpoint_ssm_param_name
+
+  # If your private subnets have no NAT, workers need a proxy or additional VPC endpoints for package/image pulls.
+  http_proxy  = "http://${module.egress_proxy.endpoint_dns_name}:${var.egress_proxy_port}"
+  https_proxy = "http://${module.egress_proxy.endpoint_dns_name}:${var.egress_proxy_port}"
+
+  # Cluster Autoscaler integration
+  cluster_name              = var.cluster_name
+  enable_cluster_autoscaler = var.enable_cluster_autoscaler
+
+  tags = {
+    Project = var.project
+  }
+}
+
+output "alb_dns_name" {
+  value       = module.kubeadm_public_alb_workers.alb_dns_name
+  description = "Public ALB DNS"
+}
+
 # -------------------------
 # Data layer
 # - RDS(MySQL)
@@ -530,5 +577,20 @@ output "rabbitmq_private_ip" {
 output "weaviate_private_ip" {
   value       = module.weaviate.private_ip
   description = "Weaviate private IP"
+}
+
+# Node-to-node connectivity rules (Calico + kubelet scrape)
+module "k8s_node_connectivity" {
+  source = "../../modules/k8s-node-connectivity"
+
+  name_prefix         = local.name_prefix
+  control_plane_sg_id = module.kubeadm_control_plane.security_group_id
+  workers_sg_id       = module.kubeadm_public_alb_workers.workers_security_group_id
+
+  # Calico (BGP + IPIP)
+  enable_calico_bgp = true # TCP/179
+  enable_ipip       = true # IP protocol 4
+
+  pod_cidr = "192.168.0.0/16"
 }
 

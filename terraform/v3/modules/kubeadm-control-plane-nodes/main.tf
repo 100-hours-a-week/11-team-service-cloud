@@ -68,6 +68,14 @@ resource "aws_iam_role_policy" "ssm_put_parameter" {
         Resource = [
           for n in var.ssm_put_parameter_names : "arn:aws:ssm:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:parameter${n}"
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeTags",
+          "ec2:DescribeInstances"
+        ]
+        Resource = "*"
       }
     ]
   })
@@ -143,6 +151,13 @@ resource "aws_instance" "cp" {
 
   iam_instance_profile = aws_iam_instance_profile.ssm.name
   key_name             = var.ssh_key_name
+
+  metadata_options {
+    http_tokens                 = "required"
+    instance_metadata_tags      = "enabled"
+    http_endpoint               = "enabled"
+    http_put_response_hop_limit = 2
+  }
 
   user_data = var.control_plane_user_data
 

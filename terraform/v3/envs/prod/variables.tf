@@ -109,9 +109,31 @@ variable "ssh_key_name" {
 }
 
 variable "worker_user_data" {
-  description = "cloud-init/user-data for worker nodes (kubeadm join etc.)"
+  description = "Optional override user-data for worker nodes. If null, the kubeadm auto-join template is used."
   type        = string
-  default     = "#!/bin/bash\nset -euxo pipefail\n# TODO: install container runtime + kubelet/kubeadm and run kubeadm join\n"
+  default     = null
+}
+
+variable "kubeadm_join_token_ssm_param_name" {
+  description = "SSM parameter name containing kubeadm join token"
+  type        = string
+}
+
+variable "kubeadm_ca_hash_ssm_param_name" {
+  description = "SSM parameter name containing discovery-token-ca-cert-hash"
+  type        = string
+}
+
+variable "kubeadm_control_plane_endpoint_ssm_param_name" {
+  description = "SSM parameter name containing kubeadm control plane endpoint (DNS:6443)"
+  type        = string
+  default     = "/scuad/v3/prod/kubeadm/control_plane_endpoint"
+}
+
+variable "kubeadm_control_plane_endpoint" {
+  description = "Kubeadm control plane endpoint override (DNS/IP without scheme). If null, internal NLB DNS is used."
+  type        = string
+  default     = null
 }
 
 variable "egress_proxy_instance_type" {
