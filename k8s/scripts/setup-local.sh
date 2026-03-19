@@ -16,7 +16,7 @@ set -euo pipefail
 
 ECR_REGISTRY="209192769586.dkr.ecr.ap-northeast-2.amazonaws.com"
 NAMESPACE="dev"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 MANIFEST_DIR="$(dirname "$SCRIPT_DIR")"
 
 echo "================================================"
