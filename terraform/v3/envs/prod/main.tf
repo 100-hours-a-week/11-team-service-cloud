@@ -594,3 +594,39 @@ module "k8s_node_connectivity" {
   pod_cidr = "192.168.0.0/16"
 }
 
+
+# -------------------------
+# Golden AMI builder (prod)
+# - Placed in private subnets (no NAT). Use egress proxy.
+# -------------------------
+module "k8s_golden_ami_builder" {
+  source = "../../modules/k8s-golden-ami-builder"
+
+  name_prefix = "${local.name_prefix}-k8s-ami-builder"
+  environment = local.environment
+  vpc_id      = data.aws_ssm_parameter.vpc_id.value
+
+  subnet_id = data.aws_subnet.workers_a.id
+
+  instance_type     = var.ami_builder_instance_type
+  ssh_key_name      = var.ssh_key_name
+  allowed_ssh_cidrs = []
+
+  enable_proxy     = var.ami_builder_enable_proxy
+  proxy_private_ip = var.ami_builder_enable_proxy ? module.egress_proxy.private_ip : null
+  proxy_port       = var.egress_proxy_port
+
+  k8s_minor_version = var.k8s_minor_version
+  helm_version      = var.helm_version
+  pause_image       = var.pause_image
+
+  tags = {
+    Project = var.project
+    Role    = "k8s-ami-builder"
+  }
+}
+
+output "ami_builder_instance_id" {
+  value       = module.k8s_golden_ami_builder.instance_id
+  description = "Golden AMI builder instance id"
+}
