@@ -21,6 +21,17 @@ variable "alb_certificate_arn" {
   type        = string
 }
 
+variable "db_password" {
+  description = "RDS MySQL master password (prod)"
+  type        = string
+  sensitive   = true
+}
+
+variable "data_service_ami_id" {
+  description = "AMI id for data service EC2 instances (redis/rabbitmq/weaviate)"
+  type        = string
+}
+
 variable "nodeport_http" {
   description = "NodePort used by ingress-nginx (HTTP)"
   type        = number
