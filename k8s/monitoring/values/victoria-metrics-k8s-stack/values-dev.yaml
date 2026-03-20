@@ -115,6 +115,11 @@ grafana:
     enabled: true
     storageClassName: local-path
     size: 5Gi
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    path: /grafana
+    pathType: Prefix
   resources:
     requests:
       cpu: "100m"
@@ -133,7 +138,8 @@ grafana:
       searchNamespace: ALL
   grafana.ini:
     server:
-      root_url: "%(protocol)s://%(domain)s/"
+      root_url: "%(protocol)s://%(domain)s/grafana/"
+      serve_from_sub_path: true
     auth.anonymous:
       enabled: false
   additionalDataSources:
