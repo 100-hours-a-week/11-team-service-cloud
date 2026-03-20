@@ -27,21 +27,21 @@ spec:
                 name: ai-shared-secret
           readinessProbe:
             httpGet:
-              path: /health
+              path: /
               port: 8000
             initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /health
+              path: /
               port: 8000
             initialDelaySeconds: 15
             periodSeconds: 30
             failureThreshold: 3
           resources:
             requests:
-              cpu: "500m"
+              cpu: "250m"
               memory: "512Mi"
             limits:
               cpu: "1"
