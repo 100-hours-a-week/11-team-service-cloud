@@ -5,10 +5,7 @@ metadata:
   namespace: argocd
 spec:
   writeBackConfig:
-    method: "git"
-    gitConfig:
-      branch: "develop"
-      writeBackTarget: "kustomization"
+    method: "argocd"
   applicationRefs:
     - namePattern: "spring-app-dev"
       images:

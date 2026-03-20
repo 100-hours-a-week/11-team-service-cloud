@@ -10,7 +10,7 @@ data:
       - name: ECR
         api_url: https://209192769586.dkr.ecr.ap-northeast-2.amazonaws.com
         prefix: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com
-        credentials: ext:/scripts/ecr-login.sh
+        credentials: pullsecret:argocd/ecr-secret
         default: true
         insecure: false
 

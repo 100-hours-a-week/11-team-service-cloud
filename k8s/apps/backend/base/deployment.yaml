@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: spring-app
-          image: scuad-backend:latest
+          image: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-backend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

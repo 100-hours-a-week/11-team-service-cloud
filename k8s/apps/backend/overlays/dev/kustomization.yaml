@@ -7,6 +7,5 @@ resources:
 namespace: dev
 
 images:
-  - name: scuad-backend:latest
-    newName: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-backend
+  - name: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-backend
     newTag: develop-latest

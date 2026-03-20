@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: scuad-ai-api:latest
+          image: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-api:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8000

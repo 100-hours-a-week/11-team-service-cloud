@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: scuad-frontend:latest
+          image: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3000

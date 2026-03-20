@@ -7,18 +7,13 @@ resources:
 namespace: dev
 
 images:
-  - name: scuad-ai-api:latest
-    newName: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-api
+  - name: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-api
     newTag: develop-latest
-  - name: scuad-ai-worker-resume:latest
-    newName: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-resume
+  - name: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-resume
     newTag: develop-latest
-  - name: scuad-ai-worker-job:latest
-    newName: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-job
+  - name: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-job
     newTag: develop-latest
-  - name: scuad-ai-worker-evaluate:latest
-    newName: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-evaluate
+  - name: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-evaluate
     newTag: develop-latest
-  - name: scuad-ai-worker-compare:latest
-    newName: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-compare
+  - name: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-compare
     newTag: develop-latest
