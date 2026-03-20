@@ -4,18 +4,12 @@ metadata:
   name: argocd-notifications-cm
   namespace: argocd
 data:
-  # ----------------------------
-  # Discord Webhook 서비스
-  # ----------------------------
   service.webhook.discord: |
     url: $discord-webhook-url
     headers:
       - name: Content-Type
         value: application/json
 
-  # ----------------------------
-  # 알림 템플릿
-  # ----------------------------
   template.app-sync-succeeded: |
     webhook:
       discord:
@@ -23,13 +17,13 @@ data:
         body: |
           {
             "embeds": [{
-              "title": "✅ 배포 성공",
-              "description": "**{{.app.metadata.name}}** 배포가 완료되었습니다.",
+              "title": "Sync Succeeded",
+              "description": "**{{.app.metadata.name}}** has been successfully synced.",
               "color": 3066993,
               "fields": [
                 {"name": "Application", "value": "{{.app.metadata.name}}", "inline": true},
-                {"name": "Revision", "value": "{{.app.status.sync.revision | trunc 7}}", "inline": true},
-                {"name": "Environment", "value": "{{.app.metadata.namespace}}", "inline": true}
+                {"name": "Namespace", "value": "{{.app.spec.destination.namespace}}", "inline": true},
+                {"name": "Revision", "value": "{{.app.status.sync.revision | trunc 7}}", "inline": true}
               ],
               "timestamp": "{{.app.status.operationState.finishedAt}}"
             }]
@@ -42,13 +36,13 @@ data:
         body: |
           {
             "embeds": [{
-              "title": "❌ 동기화 실패",
-              "description": "**{{.app.metadata.name}}** 동기화에 실패했습니다.",
+              "title": "Sync Failed",
+              "description": "**{{.app.metadata.name}}** sync has failed.",
               "color": 15158332,
               "fields": [
                 {"name": "Application", "value": "{{.app.metadata.name}}", "inline": true},
-                {"name": "Revision", "value": "{{.app.status.sync.revision | trunc 7}}", "inline": true},
-                {"name": "Message", "value": "{{.app.status.operationState.message | trunc 200}}", "inline": false}
+                {"name": "Namespace", "value": "{{.app.spec.destination.namespace}}", "inline": true},
+                {"name": "Revision", "value": "{{.app.status.sync.revision | trunc 7}}", "inline": true}
               ],
               "timestamp": "{{.app.status.operationState.finishedAt}}"
             }]
@@ -61,22 +55,19 @@ data:
         body: |
           {
             "embeds": [{
-              "title": "⚠️ 상태 이상",
-              "description": "**{{.app.metadata.name}}** 상태가 Degraded입니다.",
+              "title": "Health Degraded",
+              "description": "**{{.app.metadata.name}}** health status is degraded.",
               "color": 16776960,
               "fields": [
                 {"name": "Application", "value": "{{.app.metadata.name}}", "inline": true},
-                {"name": "Health Status", "value": "{{.app.status.health.status}}", "inline": true},
-                {"name": "Sync Status", "value": "{{.app.status.sync.status}}", "inline": true}
+                {"name": "Namespace", "value": "{{.app.spec.destination.namespace}}", "inline": true},
+                {"name": "Health Status", "value": "{{.app.status.health.status}}", "inline": true}
               ]
             }]
           }
 
-  # ----------------------------
-  # 트리거
-  # ----------------------------
   trigger.on-sync-succeeded: |
-    - when: app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
+    - when: app.status.operationState.phase in ['Succeeded']
       send: [app-sync-succeeded]
 
   trigger.on-sync-failed: |
@@ -86,22 +77,3 @@ data:
   trigger.on-health-degraded: |
     - when: app.status.health.status == 'Degraded'
       send: [app-health-degraded]
-
-  # ----------------------------
-  # 전체 앱 구독 (트리거 → webhook:discord)
-  # ----------------------------
-  subscriptions: |
-    - recipients:
-      - webhook:discord
-      triggers:
-      - on-sync-succeeded
-      - on-sync-failed
-      - on-health-degraded
-
-  # ----------------------------
-  # 기본 트리거 (전체 앱 자동 적용)
-  # ----------------------------
-  defaultTriggers: |
-    - on-sync-succeeded
-    - on-sync-failed
-    - on-health-degraded
