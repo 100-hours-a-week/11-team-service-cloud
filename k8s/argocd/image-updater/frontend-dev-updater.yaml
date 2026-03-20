@@ -5,7 +5,10 @@ metadata:
   namespace: argocd
 spec:
   writeBackConfig:
-    method: "argocd"
+    method: "git"
+    gitConfig:
+      branch: "develop"
+      writeBackTarget: "kustomization"
   applicationRefs:
     - namePattern: "web-dev"
       images:
@@ -15,3 +18,5 @@ spec:
             updateStrategy: "newest-build"
             allowTags: "regexp:^develop-"
             pullSecret: "pullsecret:argocd/ecr-secret"
+          kustomize:
+            imageNameOverride: "209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend"
