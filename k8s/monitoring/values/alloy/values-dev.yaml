@@ -1,0 +1,291 @@
+# Alloy Helm values for dev cluster
+# Chart: grafana/alloy 1.6.2 (appVersion: v1.14.0)
+# Image override: v1.14.1 (latest patch)
+# helm install alloy grafana/alloy -n monitoring --create-namespace -f values-dev.yaml
+
+image:
+  tag: v1.14.1
+
+controller:
+  type: daemonset
+  tolerations:
+    - operator: Exists
+
+serviceAccount:
+  create: true
+
+rbac:
+  create: true
+
+alloy:
+  stabilityLevel: generally-available
+
+  extraEnv:
+    - name: HOSTNAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+  configMap:
+    create: true
+    content: |
+      // ============================================================
+      // 1. METRICS: prometheus.scrape → prometheus.remote_write → VMSingle
+      // ============================================================
+
+      // -- Discover Kubernetes pods with prometheus.io annotations
+      discovery.kubernetes "pods" {
+        role = "pod"
+      }
+
+      discovery.relabel "pods_metrics" {
+        targets = discovery.kubernetes.pods.targets
+
+        // Keep only pods with prometheus.io/scrape=true
+        rule {
+          source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
+          regex         = "true"
+          action        = "keep"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scheme"]
+          action        = "replace"
+          target_label  = "__scheme__"
+          regex         = "(https?)"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+          action        = "replace"
+          target_label  = "__metrics_path__"
+          regex         = "(.+)"
+        }
+        rule {
+          source_labels = ["__address__", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
+          action        = "replace"
+          target_label  = "__address__"
+          regex         = "(.+?)(?::\\d+)?;(\\d+)"
+          replacement   = "$1:$2"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          action        = "replace"
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          action        = "replace"
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          action        = "replace"
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          action        = "replace"
+          target_label  = "app"
+        }
+        rule {
+          action       = "replace"
+          replacement  = "dev"
+          target_label = "cluster"
+        }
+      }
+
+      prometheus.scrape "pods" {
+        targets    = discovery.relabel.pods_metrics.output
+        forward_to = [prometheus.remote_write.vmsingle.receiver]
+
+        scrape_interval = "30s"
+      }
+
+      // -- Discover Kubernetes nodes for kubelet/cadvisor metrics
+      discovery.kubernetes "nodes" {
+        role = "node"
+      }
+
+      discovery.relabel "nodes_cadvisor" {
+        targets = discovery.kubernetes.nodes.targets
+
+        rule {
+          action        = "replace"
+          target_label  = "__metrics_path__"
+          replacement   = "/metrics/cadvisor"
+        }
+        rule {
+          action       = "replace"
+          replacement  = "dev"
+          target_label = "cluster"
+        }
+      }
+
+      prometheus.scrape "cadvisor" {
+        targets    = discovery.relabel.nodes_cadvisor.output
+        forward_to = [prometheus.remote_write.vmsingle.receiver]
+
+        scrape_interval = "30s"
+        scheme          = "https"
+
+        bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+
+        tls_config {
+          insecure_skip_verify = true
+        }
+      }
+
+      discovery.relabel "nodes_kubelet" {
+        targets = discovery.kubernetes.nodes.targets
+
+        rule {
+          action       = "replace"
+          replacement  = "dev"
+          target_label = "cluster"
+        }
+      }
+
+      prometheus.scrape "kubelet" {
+        targets    = discovery.relabel.nodes_kubelet.output
+        forward_to = [prometheus.remote_write.vmsingle.receiver]
+
+        scrape_interval = "30s"
+        scheme          = "https"
+
+        bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+
+        tls_config {
+          insecure_skip_verify = true
+        }
+      }
+
+      prometheus.remote_write "vmsingle" {
+        endpoint {
+          url = "http://vmsingle-vm-stack-victoria-metrics-k8s-stack.monitoring:8428/api/v1/write"
+        }
+        external_labels = {
+          cluster = "dev",
+        }
+      }
+
+      // ============================================================
+      // 2. LOGS: loki.source.kubernetes → loki.process → loki.write
+      // ============================================================
+
+      discovery.kubernetes "pods_logs" {
+        role = "pod"
+        selectors {
+          role  = "pod"
+          field = "spec.nodeName=" + coalesce(sys.env("HOSTNAME"), constants.hostname)
+        }
+      }
+
+      discovery.relabel "pod_logs" {
+        targets = discovery.kubernetes.pods_logs.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          action        = "replace"
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          action        = "replace"
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          action        = "replace"
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          action        = "replace"
+          target_label  = "app"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+          action        = "replace"
+          target_label  = "job"
+          separator     = "/"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+          action        = "replace"
+          target_label  = "__path__"
+          separator     = "/"
+          replacement   = "/var/log/pods/*$1/*.log"
+        }
+      }
+
+      loki.source.kubernetes "pod_logs" {
+        targets    = discovery.relabel.pod_logs.output
+        forward_to = [loki.process.pod_logs.receiver]
+      }
+
+      loki.process "pod_logs" {
+        stage.static_labels {
+          values = {
+            cluster = "dev",
+          }
+        }
+        forward_to = [loki.write.loki.receiver]
+      }
+
+      loki.write "loki" {
+        endpoint {
+          url       = "http://loki-gateway.monitoring/loki/api/v1/push"
+          tenant_id = "dev"
+        }
+      }
+
+      // ============================================================
+      // 3. TRACES: otelcol.receiver.otlp → otelcol.exporter.otlp → Tempo
+      // ============================================================
+
+      otelcol.receiver.otlp "default" {
+        grpc {
+          endpoint = "0.0.0.0:4317"
+        }
+        http {
+          endpoint = "0.0.0.0:4318"
+        }
+        output {
+          traces = [otelcol.processor.batch.default.input]
+        }
+      }
+
+      otelcol.processor.batch "default" {
+        timeout = "5s"
+        send_batch_size = 1024
+        output {
+          traces = [otelcol.processor.attributes.default.input]
+        }
+      }
+
+      otelcol.processor.attributes "default" {
+        action {
+          key    = "cluster"
+          value  = "dev"
+          action = "upsert"
+        }
+        output {
+          traces = [otelcol.exporter.otlp.tempo.input]
+        }
+      }
+
+      otelcol.exporter.otlp "tempo" {
+        client {
+          endpoint = "tempo.monitoring:4317"
+          tls {
+            insecure = true
+          }
+        }
+      }

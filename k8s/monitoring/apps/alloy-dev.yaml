@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alloy-dev
+  namespace: argocd
+  annotations:
+    notifications.argoproj.io/subscribe.on-sync-succeeded.discord: ""
+    notifications.argoproj.io/subscribe.on-sync-failed.discord: ""
+    notifications.argoproj.io/subscribe.on-health-degraded.discord: ""
+spec:
+  project: default
+  sources:
+    - repoURL: "https://grafana.github.io/helm-charts"
+      chart: alloy
+      targetRevision: "1.6.*"
+      helm:
+        releaseName: alloy
+        valueFiles:
+          - $values/k8s/monitoring/values/alloy/values-dev.yaml
+    - repoURL: "https://github.com/100-hours-a-week/11-team-service-cloud.git"
+      targetRevision: develop
+      ref: values
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

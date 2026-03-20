@@ -1,0 +1,287 @@
+# victoria-metrics-k8s-stack Helm values for dev cluster
+# Chart version: 0.72.5
+# VictoriaMetrics version: v1.138.0
+
+# ==============================================================================
+# VM Operator
+# ==============================================================================
+victoria-metrics-operator:
+  enabled: true
+
+# ==============================================================================
+# VMSingle - dev 환경 단일 인스턴스 (장기 저장 불필요)
+# ==============================================================================
+vmsingle:
+  enabled: true
+  spec:
+    retentionPeriod: "7d"
+    storage:
+      storageClassName: local-path
+      resources:
+        requests:
+          storage: 20Gi
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "512Mi"
+      limits:
+        cpu: "1"
+        memory: "1536Mi"
+    extraArgs:
+      dedup.minScrapeInterval: "30s"
+
+# ==============================================================================
+# VMCluster - dev 환경에서는 비활성화
+# ==============================================================================
+vmcluster:
+  enabled: false
+
+# ==============================================================================
+# VMAgent - 비활성화 (Alloy로 대체)
+# ==============================================================================
+vmagent:
+  enabled: false
+
+# ==============================================================================
+# VMAlert - alerting rules 평가
+# ==============================================================================
+vmalert:
+  enabled: true
+  spec:
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+    extraArgs:
+      external.url: ""
+
+# ==============================================================================
+# AlertManager - Discord webhook 연동
+# ==============================================================================
+alertmanager:
+  enabled: true
+  spec:
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+    configSecret: ""
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: "discord"
+      group_by: ["alertname", "namespace"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      routes:
+        - receiver: "discord"
+          matchers:
+            - severity=~"critical|warning"
+          continue: true
+    receivers:
+      - name: "discord"
+        discord_configs:
+          - webhook_url_file: /etc/alertmanager/secrets/monitoring-secret/discord-webhook-url
+            title: '{{ .GroupLabels.alertname }}'
+            message: |
+              {{ range .Alerts }}
+              **Status:** {{ .Status }}
+              **Alert:** {{ .Labels.alertname }}
+              **Namespace:** {{ .Labels.namespace }}
+              **Severity:** {{ .Labels.severity }}
+              **Description:** {{ .Annotations.description }}
+              {{ end }}
+
+# ==============================================================================
+# Grafana
+# ==============================================================================
+grafana:
+  enabled: true
+  image:
+    tag: "12.4.1"
+  admin:
+    existingSecret: monitoring-secret
+    userKey: grafana-admin-user
+    passwordKey: grafana-admin-password
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    size: 5Gi
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      searchNamespace: ALL
+    datasources:
+      enabled: true
+      label: grafana_datasource
+      searchNamespace: ALL
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s/"
+    auth.anonymous:
+      enabled: false
+  additionalDataSources:
+    # VictoriaMetrics (Prometheus-compatible)
+    - name: VictoriaMetrics
+      type: prometheus
+      uid: victoriametrics
+      url: http://vmsingle-vm-stack-victoria-metrics-k8s-stack.monitoring:8428
+      access: proxy
+      isDefault: true
+      jsonData:
+        timeInterval: "30s"
+        httpMethod: POST
+    # Loki (log aggregation)
+    - name: Loki
+      type: loki
+      uid: loki
+      url: http://loki-gateway.monitoring
+      access: proxy
+      isDefault: false
+      jsonData:
+        httpHeaderName1: X-Scope-OrgID
+        derivedFields:
+          - datasourceUid: tempo
+            matcherRegex: '"traceId"\s*:\s*"(\w+)"'
+            matcherType: regex
+            name: TraceID
+            url: "$${__value.raw}"
+      secureJsonData:
+        httpHeaderValue1: dev
+    # Tempo (distributed tracing)
+    - name: Tempo
+      type: tempo
+      uid: tempo
+      url: http://tempo.monitoring:3200
+      access: proxy
+      isDefault: false
+      jsonData:
+        httpMethod: GET
+        tracesToLogsV2:
+          datasourceUid: loki
+          spanStartTimeShift: "-1h"
+          spanEndTimeShift: "1h"
+          filterByTraceID: true
+          filterBySpanID: false
+          tags:
+            - key: service.name
+              value: service_name
+            - key: k8s.namespace.name
+              value: namespace
+        tracesToMetrics:
+          datasourceUid: victoriametrics
+          spanStartTimeShift: "-1h"
+          spanEndTimeShift: "1h"
+          tags:
+            - key: service.name
+              value: service_name
+            - key: k8s.namespace.name
+              value: namespace
+          queries:
+            - name: "Request Rate"
+              query: "sum(rate(http_server_requests_seconds_count{service_name=\"$${__tags.service_name}\"}[5m]))"
+            - name: "Error Rate"
+              query: "sum(rate(http_server_requests_seconds_count{service_name=\"$${__tags.service_name}\",status=~\"5..\"}[5m]))"
+            - name: "P95 Latency"
+              query: "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{service_name=\"$${__tags.service_name}\"}[5m])) by (le))"
+        serviceMap:
+          datasourceUid: victoriametrics
+        nodeGraph:
+          enabled: true
+        lokiSearch:
+          datasourceUid: loki
+
+# ==============================================================================
+# node-exporter
+# ==============================================================================
+prometheus-node-exporter:
+  enabled: true
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "32Mi"
+    limits:
+      cpu: "200m"
+      memory: "64Mi"
+
+# ==============================================================================
+# kube-state-metrics
+# ==============================================================================
+kube-state-metrics:
+  enabled: true
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+
+# ==============================================================================
+# kubelet / apiserver / coredns scraping
+# ==============================================================================
+kubelet:
+  enabled: true
+  spec:
+    interval: "30s"
+
+kubeApiServer:
+  enabled: true
+  spec:
+    interval: "30s"
+
+kubeControllerManager:
+  enabled: true
+
+kubeScheduler:
+  enabled: true
+
+kubeEtcd:
+  enabled: true
+
+coreDns:
+  enabled: true
+
+kubeProxy:
+  enabled: true
+
+# ==============================================================================
+# Default recording/alerting rules
+# ==============================================================================
+defaultRules:
+  create: true
+  rules:
+    etcd: true
+    general: true
+    k8s: true
+    kubeApiserver: true
+    kubeApiserverAvailability: true
+    kubeApiserverSlos: true
+    kubelet: true
+    kubePrometheusGeneral: true
+    kubePrometheusNodeRecording: true
+    kubernetesApps: true
+    kubernetesResources: true
+    kubernetesStorage: true
+    kubernetesSystem: true
+    node: true
+    vmagent: false
+    vmsingle: true
+    vmhealth: true
+    alertmanager: true
