@@ -1,0 +1,86 @@
+# Grafana additionalDataSources for victoria-metrics-k8s-stack
+# Merge into values-dev.yaml: grafana.additionalDataSources
+#
+# Note: VM k8s stack auto-provisions a default VictoriaMetrics datasource via
+# its sidecar. This file defines additional datasources (Loki, Tempo) and
+# overrides the VM datasource with explicit trace/log correlation settings.
+
+grafana:
+  additionalDataSources:
+    # ------------------------------------------------------------------
+    # 1. VictoriaMetrics (Prometheus-compatible)
+    # ------------------------------------------------------------------
+    - name: VictoriaMetrics
+      type: prometheus
+      uid: victoriametrics
+      url: http://vmsingle-vm-stack-victoria-metrics-k8s-stack.monitoring:8428
+      access: proxy
+      isDefault: true
+      jsonData:
+        timeInterval: "30s"
+        httpMethod: POST
+
+    # ------------------------------------------------------------------
+    # 2. Loki (log aggregation)
+    # ------------------------------------------------------------------
+    - name: Loki
+      type: loki
+      uid: loki
+      url: http://loki-gateway.monitoring
+      access: proxy
+      isDefault: false
+      jsonData:
+        httpHeaderName1: X-Scope-OrgID
+        derivedFields:
+          - datasourceUid: tempo
+            matcherRegex: '"traceId"\s*:\s*"(\w+)"'
+            matcherType: regex
+            name: TraceID
+            url: "$${__value.raw}"
+      secureJsonData:
+        httpHeaderValue1: dev
+
+    # ------------------------------------------------------------------
+    # 3. Tempo (distributed tracing)
+    # ------------------------------------------------------------------
+    - name: Tempo
+      type: tempo
+      uid: tempo
+      url: http://tempo.monitoring:3200
+      access: proxy
+      isDefault: false
+      jsonData:
+        httpMethod: GET
+        tracesToLogsV2:
+          datasourceUid: loki
+          spanStartTimeShift: "-1h"
+          spanEndTimeShift: "1h"
+          filterByTraceID: true
+          filterBySpanID: false
+          tags:
+            - key: service.name
+              value: service_name
+            - key: k8s.namespace.name
+              value: namespace
+        tracesToMetrics:
+          datasourceUid: victoriametrics
+          spanStartTimeShift: "-1h"
+          spanEndTimeShift: "1h"
+          tags:
+            - key: service.name
+              value: service_name
+            - key: k8s.namespace.name
+              value: namespace
+          queries:
+            - name: "Request Rate"
+              query: "sum(rate(http_server_requests_seconds_count{service_name=\"$${__tags.service_name}\"}[5m]))"
+            - name: "Error Rate"
+              query: "sum(rate(http_server_requests_seconds_count{service_name=\"$${__tags.service_name}\",status=~\"5..\"}[5m]))"
+            - name: "P95 Latency"
+              query: "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{service_name=\"$${__tags.service_name}\"}[5m])) by (le))"
+        serviceMap:
+          datasourceUid: victoriametrics
+        nodeGraph:
+          enabled: true
+        lokiSearch:
+          datasourceUid: loki
