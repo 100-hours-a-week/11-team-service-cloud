@@ -91,13 +91,13 @@ push-v3-shared-platform:
 
 # NOTE: create these env directories when you add cluster stacks
 push-v3-dev:
-	$(call push_tfvars,v3/dev,v3/envs/dev-cluster)
+	$(call push_tfvars,v3/dev,v3/envs/dev)
 
 push-v3-staging:
-	$(call push_tfvars,v3/staging,v3/envs/staging-cluster)
+	$(call push_tfvars,v3/staging,v3/envs/staging)
 
 push-v3-prod:
-	$(call push_tfvars,v3/prod,v3/envs/prod-cluster)
+	$(call push_tfvars,v3/prod,v3/envs/prod)
 
 # ---- Pull (v3) ----
 pull-v3-all: pull-v3-shared-network pull-v3-shared-platform pull-v3-dev pull-v3-staging pull-v3-prod
@@ -109,10 +109,10 @@ pull-v3-shared-platform:
 	$(call pull_tfvars,v3/shared-platform,v3/envs/shared-platform)
 
 pull-v3-dev:
-	$(call pull_tfvars,v3/dev,v3/envs/dev-cluster)
+	$(call pull_tfvars,v3/dev,v3/envs/dev)
 
 pull-v3-staging:
-	$(call pull_tfvars,v3/staging,v3/envs/staging-cluster)
+	$(call pull_tfvars,v3/staging,v3/envs/staging)
 
 pull-v3-prod:
-	$(call pull_tfvars,v3/prod,v3/envs/prod-cluster)
+	$(call pull_tfvars,v3/prod,v3/envs/prod)
