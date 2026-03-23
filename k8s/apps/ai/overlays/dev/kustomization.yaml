@@ -6,12 +6,12 @@ resources:
 namespace: dev
 images:
   - name: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-api
-    newTag: develop-a380ce3
+    newTag: develop-1785335
   - name: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-resume
-    newTag: develop-a380ce3
+    newTag: develop-1785335
   - name: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-job
-    newTag: develop-a380ce3
+    newTag: develop-1785335
   - name: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-evaluate
-    newTag: develop-a380ce3
+    newTag: develop-1785335
   - name: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-compare
-    newTag: develop-a380ce3
+    newTag: develop-1785335
