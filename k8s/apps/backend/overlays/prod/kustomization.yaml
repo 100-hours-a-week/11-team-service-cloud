@@ -6,4 +6,4 @@ resources:
 namespace: prod
 images:
   - name: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-backend
-    newTag: main-initial
+    newTag: main-27e33ff
