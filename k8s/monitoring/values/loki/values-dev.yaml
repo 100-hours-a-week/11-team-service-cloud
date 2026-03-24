@@ -1,0 +1,138 @@
+# Loki Helm values for dev cluster
+# Chart: grafana/loki 6.55.0 (appVersion: 3.6.7)
+# helm install loki grafana/loki -n monitoring --create-namespace -f values-dev.yaml
+
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: true
+
+  commonConfig:
+    path_prefix: /var/loki
+    replication_factor: 1
+
+  storage:
+    type: filesystem
+    filesystem:
+      chunks_directory: /var/loki/chunks
+      rules_directory: /var/loki/rules
+
+  schemaConfig:
+    configs:
+      - from: "2024-04-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+  ingester:
+    chunk_encoding: snappy
+
+  limits_config:
+    retention_period: 168h              # 7일 (dev 기본값)
+    ingestion_rate_mb: 10
+    ingestion_burst_size_mb: 15
+    max_query_length: 720h
+    reject_old_samples: true
+    reject_old_samples_max_age: 168h
+    allow_structured_metadata: true
+    volume_enabled: true
+
+  compactor:
+    working_directory: /var/loki/compactor
+    retention_enabled: true
+    delete_request_store: filesystem
+    compaction_interval: 10m
+    retention_delete_delay: 2h
+    retention_delete_worker_count: 150
+
+  querier:
+    max_concurrent: 4
+
+  query_range:
+    results_cache:
+      cache:
+        embedded_cache:
+          enabled: true
+          max_size_mb: 100
+
+  runtime_config:
+    file: /etc/loki/runtime-config/runtime-config.yaml
+
+# -- SingleBinary deployment
+singleBinary:
+  replicas: 1
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: local-path
+  extraVolumes:
+    - name: runtime-config
+      configMap:
+        name: loki-runtime-config
+  extraVolumeMounts:
+    - name: runtime-config
+      mountPath: /etc/loki/runtime-config
+      readOnly: true
+
+# -- Disable other deployment modes
+write:
+  replicas: 0
+read:
+  replicas: 0
+backend:
+  replicas: 0
+
+# -- Gateway (nginx reverse proxy)
+gateway:
+  enabled: true
+  service:
+    type: ClusterIP
+
+# -- Disable caches (SingleBinary uses embedded cache)
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+
+# -- Disable MinIO
+minio:
+  enabled: false
+
+# -- Disable monitoring components (self-monitoring)
+lokiCanary:
+  enabled: false
+test:
+  enabled: false
+
+# -- runtime-config ConfigMap for per-tenant overrides
+extraObjects:
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: loki-runtime-config
+      namespace: monitoring
+    data:
+      runtime-config.yaml: |
+        overrides:
+          dev:
+            retention_period: 168h
+            ingestion_rate_mb: 10
+            ingestion_burst_size_mb: 15
+          prod:
+            retention_period: 720h
+            ingestion_rate_mb: 20
+            ingestion_burst_size_mb: 30
+          staging:
+            retention_period: 336h
+            ingestion_rate_mb: 15
+            ingestion_burst_size_mb: 20

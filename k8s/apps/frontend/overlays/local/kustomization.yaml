@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+namespace: dev
+
+images:
+  - name: scuad-frontend:latest
+    newName: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend
+    newTag: develop-latest
+
+patches:
+  - target:
+      kind: Deployment
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: web
+      spec:
+        template:
+          spec:
+            imagePullSecrets:
+              - name: ecr-secret
+            containers:
+              - name: web
+                resources:
+                  requests:
+                    cpu: "100m"
+                    memory: "128Mi"
+                  limits:
+                    cpu: "250m"
+                    memory: "256Mi"

@@ -1,0 +1,156 @@
+#!/bin/bash
+set -euo pipefail
+exec > /var/log/k8s-worker-bootstrap.log 2>&1
+set -x
+
+REGION="ap-northeast-2"
+CRI_SOCKET="unix:///run/containerd/containerd.sock"
+
+PRIVATE_IP="$(hostname -I | awk '{print $1}')"
+
+# IMDSv2
+TOKEN="$(curl -sS -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")"
+
+INSTANCE_ID="$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/instance-id)"
+
+AZ="$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/placement/availability-zone)"
+
+echo "===== Worker bootstrap start ====="
+echo "PRIVATE_IP=$${PRIVATE_IP}"
+echo "INSTANCE_ID=$${INSTANCE_ID}"
+echo "AZ=$${AZ}"
+
+# kubelet node-ip / provider-id 고정
+cat >/etc/default/kubelet <<EOF
+KUBELET_EXTRA_ARGS=--node-ip=$${PRIVATE_IP} --provider-id=aws:///$${AZ}/$${INSTANCE_ID}
+EOF
+
+# Proxy settings for containerd + kubelet (systemd drop-ins)
+mkdir -p /etc/systemd/system/containerd.service.d /etc/systemd/system/kubelet.service.d
+
+cat >/etc/systemd/system/containerd.service.d/proxy.conf <<EOF
+[Service]
+Environment="HTTP_PROXY=${http_proxy}"
+Environment="HTTPS_PROXY=${https_proxy}"
+Environment="NO_PROXY=${no_proxy}"
+EOF
+
+cat >/etc/systemd/system/kubelet.service.d/proxy.conf <<EOF
+[Service]
+Environment="HTTP_PROXY=${http_proxy}"
+Environment="HTTPS_PROXY=${https_proxy}"
+Environment="NO_PROXY=${no_proxy}"
+EOF
+
+# containerd sandbox image 고정
+if [ ! -f /etc/containerd/config.toml ]; then
+  mkdir -p /etc/containerd
+  containerd config default >/etc/containerd/config.toml
+fi
+sed -i 's#sandbox_image = ".*"#sandbox_image = "registry.k8s.io/pause:3.10"#' /etc/containerd/config.toml
+
+systemctl daemon-reload
+
+# containerd 준비
+systemctl enable containerd
+systemctl restart containerd
+
+for i in $(seq 1 30); do
+  if systemctl is-active --quiet containerd; then
+    echo "containerd ready"
+    break
+  fi
+  sleep 5
+done
+
+# kubelet 준비
+# Some AMIs/systemd units require /var/lib/kubelet/config.yaml to exist.
+mkdir -p /var/lib/kubelet
+if [ ! -f /var/lib/kubelet/config.yaml ]; then
+  cat >/var/lib/kubelet/config.yaml <<'YAML'
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+cgroupDriver: systemd
+clusterDomain: cluster.local
+clusterDNS:
+  - 10.96.0.10
+YAML
+fi
+
+systemctl enable kubelet
+systemctl restart kubelet
+
+for i in $(seq 1 30); do
+  if command -v kubeadm >/dev/null 2>&1; then
+    echo "kubeadm found"
+    break
+  fi
+  sleep 5
+done
+
+# join 정보 조회
+# Prefer reading the control plane endpoint from SSM (lets us switch between NLB and cp0 IP without rebuilding nodes).
+%{ if kubeadm_control_plane_endpoint_ssm_param_name != null }
+CONTROL_PLANE_ENDPOINT="$(aws ssm get-parameter \
+  --region "$REGION" \
+  --name "${kubeadm_control_plane_endpoint_ssm_param_name}" \
+  --query 'Parameter.Value' \
+  --output text)"
+%{ else }
+CONTROL_PLANE_ENDPOINT="${control_plane_endpoint}:6443"
+%{ endif }
+
+JOIN_TOKEN="$(aws ssm get-parameter \
+  --region "$REGION" \
+  --name "${kubeadm_join_token_ssm_param_name}" \
+  --with-decryption \
+  --query 'Parameter.Value' \
+  --output text)"
+
+CA_CERT_HASH="$(aws ssm get-parameter \
+  --region "$REGION" \
+  --name "${kubeadm_ca_hash_ssm_param_name}" \
+  --with-decryption \
+  --query 'Parameter.Value' \
+  --output text)"
+
+echo "Join metadata retrieved from SSM"
+
+# 이미 join된 경우
+if [ -f /etc/kubernetes/kubelet.conf ]; then
+  echo "Node already joined"
+  exit 0
+fi
+
+# 이전 실패 흔적 제거
+kubeadm reset -f || true
+rm -rf /etc/cni/net.d || true
+
+# kubeadm join 재시도
+for i in $(seq 1 20); do
+  echo "kubeadm join attempt $i"
+
+  if kubeadm join "$CONTROL_PLANE_ENDPOINT" \
+    --token "$JOIN_TOKEN" \
+    --discovery-token-ca-cert-hash "$CA_CERT_HASH" \
+    --cri-socket "$CRI_SOCKET"; then
+
+    echo "kubeadm join success"
+
+    # CNI/CRI 상태 반영을 위해 다시 한번 순서대로 재시작
+    systemctl daemon-reload
+    systemctl restart containerd
+    systemctl restart kubelet
+
+    exit 0
+  fi
+
+  echo "join failed, retrying..."
+  sleep 15
+done
+
+echo "kubeadm join failed after retries"
+exit 1

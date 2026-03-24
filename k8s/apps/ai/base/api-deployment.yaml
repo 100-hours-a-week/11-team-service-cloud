@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-api
+  labels:
+    app: ai-api
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-api
+  template:
+    metadata:
+      labels:
+        app: ai-api
+        tier: backend
+    spec:
+      containers:
+        - name: api
+          image: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: ai-shared-secret
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"

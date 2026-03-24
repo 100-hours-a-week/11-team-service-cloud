@@ -1,0 +1,86 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+namespace: dev
+
+images:
+  - name: scuad-ai-api:latest
+    newName: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-api
+    newTag: develop-latest
+  - name: scuad-ai-worker-resume:latest
+    newName: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-resume
+    newTag: develop-latest
+  - name: scuad-ai-worker-job:latest
+    newName: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-job
+    newTag: develop-latest
+  - name: scuad-ai-worker-evaluate:latest
+    newName: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-evaluate
+    newTag: develop-latest
+  - name: scuad-ai-worker-compare:latest
+    newName: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-compare
+    newTag: develop-latest
+
+patches:
+  - target:
+      kind: Deployment
+      name: ai-api
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ai-api
+      spec:
+        template:
+          spec:
+            imagePullSecrets:
+              - name: ecr-secret
+            containers:
+              - name: api
+                resources:
+                  requests:
+                    cpu: "100m"
+                    memory: "256Mi"
+                  limits:
+                    cpu: "250m"
+                    memory: "512Mi"
+
+  - target:
+      kind: Deployment
+      name: ai-worker-resume
+    patch: &worker-patch |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: not-used
+      spec:
+        template:
+          spec:
+            imagePullSecrets:
+              - name: ecr-secret
+            containers:
+              - name: worker-resume
+                resources:
+                  requests:
+                    cpu: "100m"
+                    memory: "256Mi"
+                  limits:
+                    cpu: "500m"
+                    memory: "512Mi"
+
+  - target:
+      kind: Deployment
+      name: ai-worker-job
+    patch: *worker-patch
+
+  - target:
+      kind: Deployment
+      name: ai-worker-evaluate
+    patch: *worker-patch
+
+  - target:
+      kind: Deployment
+      name: ai-worker-compare
+    patch: *worker-patch

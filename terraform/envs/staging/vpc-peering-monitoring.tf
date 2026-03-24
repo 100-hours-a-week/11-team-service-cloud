@@ -32,3 +32,22 @@ resource "aws_route" "staging_private_to_dev" {
   destination_cidr_block    = var.dev_vpc_cidr
   vpc_peering_connection_id = data.aws_vpc_peering_connection.from_dev.id
 }
+
+# staging public 서브넷(egress proxy)에서 dev로의 응답 라우팅
+data "aws_route_table" "staging_public" {
+  filter {
+    name   = "vpc-id"
+    values = [module.network.vpc_id]
+  }
+
+  filter {
+    name   = "tag:Name"
+    values = ["${local.name_prefix}-public-rt"]
+  }
+}
+
+resource "aws_route" "staging_public_to_dev" {
+  route_table_id            = data.aws_route_table.staging_public.id
+  destination_cidr_block    = var.dev_vpc_cidr
+  vpc_peering_connection_id = data.aws_vpc_peering_connection.from_dev.id
+}

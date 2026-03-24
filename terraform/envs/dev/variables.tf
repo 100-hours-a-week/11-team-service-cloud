@@ -170,6 +170,17 @@ variable "db_password" {
 }
 
 variable "monitoring_instance_type" {
+  type    = string
+  default = "t3.small"
+}
+
+# ---- VPN ----
+variable "vpn_eip_allocation_id" {
+  description = "EIP Allocation ID for the VPN instance"
   type        = string
-  default     = "t3.small"
+}
+
+variable "vpn_public_ip" {
+  description = "Public IP corresponding to the VPN EIP Allocation ID"
+  type        = string
 }

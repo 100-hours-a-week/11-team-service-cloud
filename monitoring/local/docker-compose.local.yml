@@ -1,0 +1,95 @@
+name: scuad-monitoring
+services:
+  # 그라파나
+  grafana:
+    image: grafana/grafana-enterprise
+    container_name: scuad-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SERVER_ROOT_URL=http://my.grafana.server/
+      - GF_PLUGINS_PREINSTALL=grafana-clock-panel
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - scuad-network
+
+  # 프로메테우스
+  prometheus:
+    image: prom/prometheus
+    container_name: scuad-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - "./prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    networks:
+      - scuad-network
+  # loki
+  loki:
+    image: grafana/loki:latest
+    container_name: scuad-loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml -config.expand-env=true
+    volumes:
+      - loki_data:/loki
+    networks:
+      - scuad-network
+
+  # cadvisor
+  cadvisor:
+    container_name: scuad-cadvisor
+    image: gcr.io/cadvisor/cadvisor:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    ports:
+      - 3002:8080
+    command:
+      - -housekeeping_interval=5s
+
+  #promtail
+  promtail:
+    image: grafana/promtail:latest
+    container_name: scaud-promtail
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail.yaml
+    ports:
+      - "9080:9080"
+    volumes:
+      - "./promtail.yaml:/etc/promtail/promtail.yaml:ro"
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    networks:
+      - scuad-network
+    user: root
+
+
+networks:
+  scuad-network:
+    external: true
+
+volumes:
+  grafana_storage:
+    driver: local
+  grafana_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  loki_data:
+    driver: local
+  cadvisor_data:
+    driver: local

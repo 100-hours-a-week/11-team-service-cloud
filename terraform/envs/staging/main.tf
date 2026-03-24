@@ -48,6 +48,8 @@ module "network" {
   azs                       = var.azs
   allowed_ssh_cidrs         = var.allowed_ssh_cidrs
   node_exporter_cidr_blocks = [var.dev_vpc_cidr]
+  cadvisor_allowed_cidrs    = [var.dev_vpc_cidr]
+  app_metrics_allowed_cidrs = [var.dev_vpc_cidr]
 }
 
 module "ssm_human_access" {

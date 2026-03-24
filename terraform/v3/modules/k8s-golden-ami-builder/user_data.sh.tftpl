@@ -1,0 +1,185 @@
+#!/bin/bash
+set -euo pipefail
+exec > /var/log/user-data.log 2>&1
+set -x
+
+# =========================
+# Variables
+# =========================
+K8S_MINOR_VERSION="${k8s_minor_version}"
+HELM_VERSION="${helm_version}"
+
+%{ if enable_proxy }
+HTTP_PROXY="http://${proxy_private_ip}:${proxy_port}"
+HTTPS_PROXY="http://${proxy_private_ip}:${proxy_port}"
+NO_PROXY="${no_proxy}"
+%{ else }
+HTTP_PROXY=""
+HTTPS_PROXY=""
+NO_PROXY="${no_proxy}"
+%{ endif }
+
+# ECR mirrored pause image
+PAUSE_IMAGE="${pause_image}"
+
+export DEBIAN_FRONTEND=noninteractive
+
+# =========================
+# Proxy environment (optional)
+# =========================
+%{ if enable_proxy }
+cat <<EOF >/etc/environment
+HTTP_PROXY=$${HTTP_PROXY}
+HTTPS_PROXY=$${HTTPS_PROXY}
+NO_PROXY=$${NO_PROXY}
+http_proxy=$${HTTP_PROXY}
+https_proxy=$${HTTPS_PROXY}
+no_proxy=$${NO_PROXY}
+EOF
+
+export HTTP_PROXY="$${HTTP_PROXY}"
+export HTTPS_PROXY="$${HTTPS_PROXY}"
+export NO_PROXY="$${NO_PROXY}"
+export http_proxy="$${HTTP_PROXY}"
+export https_proxy="$${HTTPS_PROXY}"
+export no_proxy="$${NO_PROXY}"
+
+mkdir -p /etc/systemd/system/containerd.service.d
+cat <<EOF >/etc/systemd/system/containerd.service.d/proxy.conf
+[Service]
+Environment="HTTP_PROXY=$${HTTP_PROXY}"
+Environment="HTTPS_PROXY=$${HTTPS_PROXY}"
+Environment="NO_PROXY=$${NO_PROXY}"
+EOF
+
+mkdir -p /etc/systemd/system/kubelet.service.d
+cat <<EOF >/etc/systemd/system/kubelet.service.d/proxy.conf
+[Service]
+Environment="HTTP_PROXY=$${HTTP_PROXY}"
+Environment="HTTPS_PROXY=$${HTTPS_PROXY}"
+Environment="NO_PROXY=$${NO_PROXY}"
+EOF
+
+systemctl daemon-reload
+%{ else }
+# Proxy disabled
+%{ endif }
+
+# =========================
+# Basic packages
+# =========================
+apt-get update
+apt-get upgrade -y
+apt-get install -y \
+  apt-transport-https \
+  ca-certificates \
+  curl \
+  gpg \
+  unzip \
+  jq \
+  snapd \
+  containerd
+
+# =========================
+# Install AWS CLI (snap)
+# =========================
+systemctl enable --now snapd || true
+snap install aws-cli --classic || true
+aws --version || true
+
+# =========================
+# Disable swap
+# =========================
+swapoff -a
+sed -ri '/\sswap\s/s/^#?/#/' /etc/fstab
+
+# =========================
+# Kernel modules / sysctl
+# =========================
+cat <<EOF >/etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
+modprobe overlay
+modprobe br_netfilter
+
+cat <<EOF >/etc/sysctl.d/99-kubernetes-cri.conf
+net.bridge.bridge-nf-call-iptables = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward = 1
+EOF
+sysctl --system
+
+# =========================
+# containerd config
+# =========================
+mkdir -p /etc/containerd
+containerd config default >/etc/containerd/config.toml
+sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+sed -i "s#sandbox_image = \".*\"#sandbox_image = \"$${PAUSE_IMAGE}\"#g" /etc/containerd/config.toml
+systemctl enable containerd
+systemctl restart containerd
+
+# =========================
+# crictl config
+# =========================
+cat <<EOF >/etc/crictl.yaml
+runtime-endpoint: unix:///run/containerd/containerd.sock
+image-endpoint: unix:///run/containerd/containerd.sock
+timeout: 10
+debug: false
+EOF
+
+# =========================
+# Kubernetes repo
+# =========================
+mkdir -p /etc/apt/keyrings
+curl -fsSL "https://pkgs.k8s.io/core:/stable:/$${K8S_MINOR_VERSION}/deb/Release.key" \
+  | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/$${K8S_MINOR_VERSION}/deb/ /" \
+  >/etc/apt/sources.list.d/kubernetes.list
+
+apt-get update
+apt-get install -y kubelet kubeadm kubectl
+apt-mark hold kubelet kubeadm kubectl
+
+# =========================
+# kubelet extra args
+# =========================
+NODE_IP=$(hostname -I | awk '{print $1}')
+cat <<EOF >/etc/default/kubelet
+KUBELET_EXTRA_ARGS=--node-ip=$${NODE_IP}
+EOF
+
+systemctl daemon-reload
+systemctl enable kubelet
+systemctl restart kubelet
+
+# =========================
+# Install Helm
+# =========================
+cd /tmp
+curl -LO https://get.helm.sh/helm-$${HELM_VERSION}-linux-amd64.tar.gz
+tar -xzf helm-$${HELM_VERSION}-linux-amd64.tar.gz
+mv linux-amd64/helm /usr/local/bin/helm
+chmod +x /usr/local/bin/helm
+rm -rf linux-amd64 helm-$${HELM_VERSION}-linux-amd64.tar.gz
+helm version || true
+
+# =========================
+# Enable SSM Agent
+# =========================
+systemctl enable amazon-ssm-agent || true
+systemctl restart amazon-ssm-agent || true
+
+# =========================
+# Alias
+# =========================
+cat <<EOF >/etc/profile.d/k8s-aliases.sh
+alias k=kubectl
+EOF
+chmod +x /etc/profile.d/k8s-aliases.sh
+
+echo "Golden AMI Kubernetes node setup complete"
+echo "IMPORTANT: Do NOT run kubeadm init or kubeadm join on this instance"

@@ -35,3 +35,15 @@ variable "node_exporter_cidr_blocks" {
   type        = list(string)
   default     = []
 }
+
+variable "cadvisor_allowed_cidrs" {
+  description = "CIDR blocks allowed to scrape cadvisor (:9102) on web/spring/ai instances"
+  type        = list(string)
+  default     = []
+}
+
+variable "app_metrics_allowed_cidrs" {
+  description = "CIDR blocks allowed to scrape application metrics (:9101) on spring instances"
+  type        = list(string)
+  default     = []
+}

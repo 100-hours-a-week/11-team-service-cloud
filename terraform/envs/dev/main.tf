@@ -42,6 +42,8 @@ module "network" {
   azs                       = var.azs
   allowed_ssh_cidrs         = var.allowed_ssh_cidrs
   node_exporter_cidr_blocks = [var.vpc_cidr]
+  cadvisor_allowed_cidrs    = [var.vpc_cidr]
+  app_metrics_allowed_cidrs = [var.vpc_cidr]
 }
 
 module "ssm_human_access" {
@@ -416,6 +418,32 @@ resource "aws_instance" "egress_proxy" {
 
     systemctl enable --now squid
     systemctl restart squid
+
+    systemctl enable --now docker
+
+    timeout 60 bash -c 'until docker info >/dev/null 2>&1; do echo "Waiting for docker..."; sleep 1; done'
+    # --모니터링 환경 구성--------------------------------------------------------------
+    REGION="ap-northeast-2"
+    MONITORING_DIR="/opt/monitoring"
+    S3_BUCKET="scuad-dev-config"
+    S3_PATH="monitoring"
+    
+    PROMTAIL_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/docker-compose.yml"
+    PROMTAIL_CONF_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/promtail.yaml"
+
+    CADVISOR_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/cadvisor/docker-compose.yml"
+
+    mkdir -p "$MONITORING_DIR/promtail"
+    mkdir -p "$MONITORING_DIR/cadvisor"
+    
+    cd "$MONITORING_DIR/promtail"
+    aws s3 cp "$PROMTAIL_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    aws s3 cp "$PROMTAIL_CONF_S3_URI" ./promtail.yaml --region "$REGION"
+    docker compose up -d
+
+    cd "$MONITORING_DIR/cadvisor"
+    aws s3 cp "$CADVISOR_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    docker compose up -d
   EOF
 
   tags = {
@@ -460,11 +488,41 @@ resource "aws_launch_template" "web" {
     aws ecr get-login-password --region ap-northeast-2 | \
       docker login --username AWS --password-stdin 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com
 
-    docker pull 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend:dev-0.0.0
+    mkdir -p /opt/scuad
+    
+    aws ssm get-parameter --name "/dev/fe/DOT_ENV" --with-decryption --query "Parameter.Value" --output text --region ap-northeast-2 > /opt/scuad/.env
+    
+    chmod 600 /opt/scuad/.env
 
+    docker pull 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend:develop-latest
+    
     docker rm -f scuad-frontend || true
     docker run -d --restart unless-stopped --name scuad-frontend -p 3000:3000 \
-      209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend:dev-0.0.0
+      --env-file /opt/scuad/.env \
+      209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend:develop-latest
+    
+    # --모니터링 환경 구성--------------------------------------------------------------
+    REGION="ap-northeast-2"
+    MONITORING_DIR="/opt/monitoring"
+    S3_BUCKET="scuad-dev-config"
+    S3_PATH="monitoring"
+    
+    PROMTAIL_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/docker-compose.yml"
+    PROMTAIL_CONF_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/promtail.yaml"
+
+    CADVISOR_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/cadvisor/docker-compose.yml"
+
+    mkdir -p "$MONITORING_DIR/promtail"
+    mkdir -p "$MONITORING_DIR/cadvisor"
+    
+    cd "$MONITORING_DIR/promtail"
+    aws s3 cp "$PROMTAIL_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    aws s3 cp "$PROMTAIL_CONF_S3_URI" ./promtail.yaml --region "$REGION"
+    docker compose up -d
+
+    cd "$MONITORING_DIR/cadvisor"
+    aws s3 cp "$CADVISOR_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    docker compose up -d
   EOF
   )
 
@@ -567,6 +625,30 @@ resource "aws_launch_template" "app_spring" {
 
     retry docker compose pull
     docker compose up -d --remove-orphans
+
+    # --모니터링 환경 구성--------------------------------------------------------------
+    REGION="ap-northeast-2"
+    MONITORING_DIR="/opt/monitoring"
+    S3_BUCKET="scuad-dev-config"
+    S3_PATH="monitoring"
+    
+    PROMTAIL_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/docker-compose.yml"
+    PROMTAIL_CONF_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/promtail.yaml"
+
+    CADVISOR_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/cadvisor/docker-compose.yml"
+
+    mkdir -p "$MONITORING_DIR/promtail"
+    mkdir -p "$MONITORING_DIR/cadvisor"
+    
+    cd "$MONITORING_DIR/promtail"
+    aws s3 cp "$PROMTAIL_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    aws s3 cp "$PROMTAIL_CONF_S3_URI" ./promtail.yaml --region "$REGION"
+    docker compose up -d
+
+    cd "$MONITORING_DIR/cadvisor"
+    aws s3 cp "$CADVISOR_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    docker compose up -d
+
   EOF
   )
 
@@ -622,7 +704,7 @@ resource "aws_launch_template" "app_ai" {
     device_name = "/dev/sda1"
 
     ebs {
-      volume_size           = 20
+      volume_size           = 40
       volume_type           = "gp3"
       delete_on_termination = true
     }
@@ -646,15 +728,68 @@ resource "aws_launch_template" "app_ai" {
     aws ecr get-login-password --region ap-northeast-2 | \
       docker login --username AWS --password-stdin 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com
 
-    docker pull 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai:dev-0.1.0
+    REGISTRY="209192769586.dkr.ecr.ap-northeast-2.amazonaws.com"
+    TAG="develop-latest"
+
+    # 5개 MSA 이미지 pull
+    docker pull $REGISTRY/scuad-ai-api:$TAG
+    docker pull $REGISTRY/scuad-ai-worker-resume:$TAG
+    docker pull $REGISTRY/scuad-ai-worker-job:$TAG
+    docker pull $REGISTRY/scuad-ai-worker-evaluate:$TAG
+    docker pull $REGISTRY/scuad-ai-worker-compare:$TAG
 
     # Parameter Store에서 .env 가져오기
-    aws ssm get-parameter --name "/ai/env/DEV_DOT_ENV" --with-decryption --query "Parameter.Value" --output text --region ap-northeast-2 > /home/ubuntu/.env
+    mkdir -p /opt/scuad
+    aws ssm get-parameter --name "/dev/ai/DOT_ENV" --with-decryption --query "Parameter.Value" --output text --region ap-northeast-2 > /opt/scuad/.env
+    chmod 600 /opt/scuad/.env
 
-    docker rm -f scuad-ai || true
-    docker run -d --restart unless-stopped --name scuad-ai -p 8000:8000 \
-      --env-file /home/ubuntu/.env \
-      209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai:dev-0.1.0
+    # 기존 컨테이너 정리
+    docker rm -f scuad-ai scuad-ai-api scuad-ai-worker-resume scuad-ai-worker-job scuad-ai-worker-evaluate scuad-ai-worker-compare || true
+
+    # API 서버 (포트 8000 노출)
+    docker run -d --restart unless-stopped --name scuad-ai-api \
+      --env-file /opt/scuad/.env -p 8000:8000 \
+      $REGISTRY/scuad-ai-api:$TAG
+
+    # 워커들
+    docker run -d --restart unless-stopped --name scuad-ai-worker-resume \
+      --env-file /opt/scuad/.env \
+      $REGISTRY/scuad-ai-worker-resume:$TAG
+
+    docker run -d --restart unless-stopped --name scuad-ai-worker-job \
+      --env-file /opt/scuad/.env \
+      $REGISTRY/scuad-ai-worker-job:$TAG
+
+    docker run -d --restart unless-stopped --name scuad-ai-worker-evaluate \
+      --env-file /opt/scuad/.env \
+      $REGISTRY/scuad-ai-worker-evaluate:$TAG
+
+    docker run -d --restart unless-stopped --name scuad-ai-worker-compare \
+      --env-file /opt/scuad/.env \
+      $REGISTRY/scuad-ai-worker-compare:$TAG
+    
+       # --모니터링 환경 구성--------------------------------------------------------------
+    REGION="ap-northeast-2"
+    MONITORING_DIR="/opt/monitoring"
+    S3_BUCKET="scuad-dev-config"
+    S3_PATH="monitoring"
+    
+    PROMTAIL_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/docker-compose.yml"
+    PROMTAIL_CONF_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/promtail.yaml"
+
+    CADVISOR_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/cadvisor/docker-compose.yml"
+
+    mkdir -p "$MONITORING_DIR/promtail"
+    mkdir -p "$MONITORING_DIR/cadvisor"
+    
+    cd "$MONITORING_DIR/promtail"
+    aws s3 cp "$PROMTAIL_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    aws s3 cp "$PROMTAIL_CONF_S3_URI" ./promtail.yaml --region "$REGION"
+    docker compose up -d
+
+    cd "$MONITORING_DIR/cadvisor"
+    aws s3 cp "$CADVISOR_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    docker compose up -d
   EOF
   )
 
@@ -732,14 +867,23 @@ resource "aws_security_group" "redis" {
   }
 
   ingress {
-    description = "node_exporter from monitoring"
+    description = "Node Exporter from VPC"
     from_port   = 9100
     to_port     = 9100
     protocol    = "tcp"
     cidr_blocks = [var.vpc_cidr]
   }
 
+  ingress {
+    description = "cAdvisor from VPC"
+    from_port   = 9102
+    to_port     = 9102
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
   egress {
+
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -800,6 +944,29 @@ resource "aws_instance" "redis" {
 
     retry docker compose pull
     docker compose up -d --remove-orphans
+
+       # --모니터링 환경 구성--------------------------------------------------------------
+    REGION="ap-northeast-2"
+    MONITORING_DIR="/opt/monitoring"
+    S3_BUCKET="scuad-dev-config"
+    S3_PATH="monitoring"
+    
+    PROMTAIL_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/docker-compose.yml"
+    PROMTAIL_CONF_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/promtail.yaml"
+
+    CADVISOR_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/cadvisor/docker-compose.yml"
+
+    mkdir -p "$MONITORING_DIR/promtail"
+    mkdir -p "$MONITORING_DIR/cadvisor"
+    
+    cd "$MONITORING_DIR/promtail"
+    aws s3 cp "$PROMTAIL_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    aws s3 cp "$PROMTAIL_CONF_S3_URI" ./promtail.yaml --region "$REGION"
+    docker compose up -d
+
+    cd "$MONITORING_DIR/cadvisor"
+    aws s3 cp "$CADVISOR_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    docker compose up -d
   EOF
 
   tags = {
@@ -832,14 +999,23 @@ resource "aws_security_group" "rabbitmq" {
   }
 
   ingress {
-    description = "node_exporter from monitoring"
+    description = "Node Exporter from VPC"
     from_port   = 9100
     to_port     = 9100
     protocol    = "tcp"
     cidr_blocks = [var.vpc_cidr]
   }
 
+  ingress {
+    description = "cAdvisor from VPC"
+    from_port   = 9102
+    to_port     = 9102
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
   egress {
+
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -900,6 +1076,29 @@ resource "aws_instance" "rabbitmq" {
 
     retry docker compose pull
     docker compose up -d --remove-orphans
+
+       # --모니터링 환경 구성--------------------------------------------------------------
+    REGION="ap-northeast-2"
+    MONITORING_DIR="/opt/monitoring"
+    S3_BUCKET="scuad-dev-config"
+    S3_PATH="monitoring"
+    
+    PROMTAIL_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/docker-compose.yml"
+    PROMTAIL_CONF_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/promtail.yaml"
+
+    CADVISOR_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/cadvisor/docker-compose.yml"
+
+    mkdir -p "$MONITORING_DIR/promtail"
+    mkdir -p "$MONITORING_DIR/cadvisor"
+    
+    cd "$MONITORING_DIR/promtail"
+    aws s3 cp "$PROMTAIL_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    aws s3 cp "$PROMTAIL_CONF_S3_URI" ./promtail.yaml --region "$REGION"
+    docker compose up -d
+
+    cd "$MONITORING_DIR/cadvisor"
+    aws s3 cp "$CADVISOR_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    docker compose up -d
   EOF
 
   # Slightly larger root volume is usually helpful for queues/logs.
@@ -939,14 +1138,31 @@ resource "aws_security_group" "weaviate" {
   }
 
   ingress {
-    description = "node_exporter from monitoring"
+    description     = "Weaviate gRPC from AI"
+    from_port       = 50051
+    to_port         = 50051
+    protocol        = "tcp"
+    security_groups = [module.network.app_ai_security_group_id]
+  }
+
+  ingress {
+    description = "Node Exporter from VPC"
     from_port   = 9100
     to_port     = 9100
     protocol    = "tcp"
     cidr_blocks = [var.vpc_cidr]
   }
 
+  ingress {
+    description = "cAdvisor from VPC"
+    from_port   = 9102
+    to_port     = 9102
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
   egress {
+
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -1007,6 +1223,29 @@ resource "aws_instance" "weaviate" {
 
     retry docker compose pull
     docker compose up -d --remove-orphans
+
+       # --모니터링 환경 구성--------------------------------------------------------------
+    REGION="ap-northeast-2"
+    MONITORING_DIR="/opt/monitoring"
+    S3_BUCKET="scuad-dev-config"
+    S3_PATH="monitoring"
+    
+    PROMTAIL_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/docker-compose.yml"
+    PROMTAIL_CONF_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/promtail.yaml"
+
+    CADVISOR_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/cadvisor/docker-compose.yml"
+
+    mkdir -p "$MONITORING_DIR/promtail"
+    mkdir -p "$MONITORING_DIR/cadvisor"
+    
+    cd "$MONITORING_DIR/promtail"
+    aws s3 cp "$PROMTAIL_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    aws s3 cp "$PROMTAIL_CONF_S3_URI" ./promtail.yaml --region "$REGION"
+    docker compose up -d
+
+    cd "$MONITORING_DIR/cadvisor"
+    aws s3 cp "$CADVISOR_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    docker compose up -d
   EOF
 
   # Vector DB tends to need disk headroom.
@@ -1085,11 +1324,15 @@ resource "aws_security_group" "monitoring" {
   }
 
   ingress {
-    description = "node_exporter from monitoring"
-    from_port   = 9100
-    to_port     = 9100
+    description = "Loki from all VPCs"
+    from_port   = 3100
+    to_port     = 3100
     protocol    = "tcp"
-    cidr_blocks = [var.vpc_cidr]
+    cidr_blocks = [
+      var.vpc_cidr,
+      data.aws_vpc.staging.cidr_block,
+      data.aws_vpc.prod.cidr_block
+    ]
   }
 
   egress {
@@ -1105,13 +1348,96 @@ resource "aws_security_group" "monitoring" {
   }
 }
 
-resource "aws_ebs_volume" "prometheus_data" {
+# ── Monitoring IAM (monitoring EC2 Service Discovery) ─────────────
+resource "aws_iam_role" "monitoring" {
+  name = "${local.name_prefix}-monitoring-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "${local.name_prefix}-monitoring-role"
+    Environment = local.environment
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "monitoring_ssm_core" {
+  role       = aws_iam_role.monitoring.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_role_policy_attachment" "monitoring_ecr_readonly" {
+  role       = aws_iam_role.monitoring.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+resource "aws_iam_role_policy" "monitoring_ec2_describe" {
+  name = "ec2-describe-instances"
+  role = aws_iam_role.monitoring.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["ec2:DescribeInstances"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# ── Monitoring IAM (S3 Read for docker-compose files) ───────────
+resource "aws_iam_role_policy" "monitoring_s3_read" {
+  name = "s3-read-policy"
+  role = aws_iam_role.monitoring.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::scuad-dev-config",
+          "arn:aws:s3:::scuad-dev-config/*"
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_instance_profile" "monitoring" {
+  name = "${local.name_prefix}-monitoring-profile"
+  role = aws_iam_role.monitoring.name
+
+  tags = {
+    Name        = "${local.name_prefix}-monitoring-profile"
+    Environment = local.environment
+  }
+}
+
+# ── Monitoring EBS ───────────────────────────────────────────────
+resource "aws_ebs_volume" "monitoring_data" {
   availability_zone = "ap-northeast-2a"
-  size              = 20
+  size              = 21
   type              = "gp3"
 
   tags = {
-    Name = "prometheus-data"
+    Name = "monitoring-data"
   }
 }
 
@@ -1121,7 +1447,7 @@ resource "aws_instance" "monitoring" {
   instance_type          = var.monitoring_instance_type
   subnet_id              = module.network.public_subnet_ids[0]
   vpc_security_group_ids = [aws_security_group.monitoring.id]
-  iam_instance_profile   = module.iam.iam_instance_profile_name
+  iam_instance_profile   = aws_iam_instance_profile.monitoring.name
 
   tags = {
     Name        = "${local.name_prefix}-monitoring"
@@ -1130,21 +1456,196 @@ resource "aws_instance" "monitoring" {
 
   user_data = <<-EOF
     #!/bin/bash
-    if ! blkid /dev/xvdf; then
-      mkfs -t ext4 /dev/xvdf
+    
+    # AWS Nitro 인스턴스는 추가된 첫 번째 EBS 볼륨을 /dev/nvme1n1 로 인식합니다.
+    DEVICE_PATH="/dev/nvme1n1"
+
+    # 디스크 포맷 (최초 1회)
+    if ! blkid $DEVICE_PATH; then
+      mkfs -t ext4 $DEVICE_PATH
     fi
 
     # 마운트
-    mkdir -p /data/prometheus
-    mount /dev/xvdf /data/prometheus
+    mkdir -p /data/monitoring
+    mount $DEVICE_PATH /data/monitoring
 
-    # 재부팅 후에도 자동 마운트
-    echo "/dev/xvdf /data/prometheus ext4 defaults,nofail 0 2" >> /etc/fstab
+    # 재부팅 후에도 자동 마운트 (UUID를 사용하여 안정성 확보)
+    UUID=$(blkid -s UUID -o value $DEVICE_PATH)
+    echo "UUID=$UUID /data/monitoring ext4 defaults,nofail 0 2" >> /etc/fstab
+
+    # 도커 실행
+    systemctl enable --now docker
+    timeout 60 bash -c 'until docker info >/dev/null 2>&1; do echo "Waiting for docker..."; sleep 1; done'
+
+    # 도커 네트워크 생성
+    docker network create scuad-monitoring-network || true
+
+    # prometheus, grafana, loki 데이터 디렉토리 생성
+    mkdir -p /data/monitoring/prometheus
+    mkdir -p /data/monitoring/grafana
+    mkdir -p /data/monitoring/loki
+    
+    chmod -R 777 /data/monitoring/prometheus
+    chmod -R 777 /data/monitoring/grafana
+    chmod -R 777 /data/monitoring/loki
+
+    # prometheus 환경 구성
+    mkdir -p /opt/monitoring/prometheus
+
+    aws s3 cp s3://scuad-dev-config/monitoring/prometheus/prometheus.yml /opt/monitoring/prometheus/prometheus.yml --region ap-northeast-2
+    aws s3 cp s3://scuad-dev-config/monitoring/prometheus/docker-compose.yml /opt/monitoring/prometheus/docker-compose.yml --region ap-northeast-2
+
+    chmod -R 777 /opt/monitoring/prometheus
+
+    docker compose -f /opt/monitoring/prometheus/docker-compose.yml up -d
+
+    # grafana 환경 구성
+    mkdir -p /opt/monitoring/grafana
+
+    aws s3 cp s3://scuad-dev-config/monitoring/grafana/docker-compose.yml /opt/monitoring/grafana/docker-compose.yml --region ap-northeast-2
+
+    chmod -R 777 /opt/monitoring/grafana
+    
+    docker compose -f /opt/monitoring/grafana/docker-compose.yml up -d
+
+    # loki 환경 구성
+    mkdir -p /opt/monitoring/loki
+
+    aws s3 cp s3://scuad-dev-config/monitoring/loki/loki-config.yml /opt/monitoring/loki/loki-config.yaml --region ap-northeast-2
+    aws s3 cp s3://scuad-dev-config/monitoring/loki/docker-compose.yml /opt/monitoring/loki/docker-compose.yml --region ap-northeast-2
+
+    chmod -R 777 /opt/monitoring/loki
+
+    docker compose -f /opt/monitoring/loki/docker-compose.yml up -d
+
+       # --모니터링 환경 구성--------------------------------------------------------------
+    REGION="ap-northeast-2"
+    MONITORING_DIR="/opt/monitoring"
+    S3_BUCKET="scuad-dev-config"
+    S3_PATH="monitoring"
+    
+    PROMTAIL_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/docker-compose.yml"
+    PROMTAIL_CONF_S3_URI="s3://$S3_BUCKET/$S3_PATH/promtail/promtail.yaml"
+
+    CADVISOR_COMPOSE_S3_URI="s3://$S3_BUCKET/$S3_PATH/cadvisor/docker-compose.yml"
+
+    mkdir -p "$MONITORING_DIR/promtail"
+    mkdir -p "$MONITORING_DIR/cadvisor"
+    
+    cd "$MONITORING_DIR/promtail"
+    aws s3 cp "$PROMTAIL_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    aws s3 cp "$PROMTAIL_CONF_S3_URI" ./promtail.yaml --region "$REGION"
+    docker compose up -d
+
+    cd "$MONITORING_DIR/cadvisor"
+    aws s3 cp "$CADVISOR_COMPOSE_S3_URI" ./docker-compose.yml --region "$REGION"
+    docker compose up -d
+
   EOF
 }
 
-resource "aws_volume_attachment" "prometheus_data" {
+resource "aws_volume_attachment" "monitoring_data" {
   device_name = "/dev/xvdf"
-  volume_id   = aws_ebs_volume.prometheus_data.id
+  volume_id   = aws_ebs_volume.monitoring_data.id
   instance_id = aws_instance.monitoring.id
+}
+
+# ── Route 53 Private DNS for Monitoring ────────────────────────────────
+
+# 1. 내부 전용 호스팅 영역 생성
+resource "aws_route53_zone" "internal" {
+  name = "scuad.internal"
+
+  # Dev VPC 연결
+  vpc {
+    vpc_id = module.network.vpc_id
+  }
+
+  # Staging VPC 연결 (VPC Peering 데이터 소스 활용)
+  vpc {
+    vpc_id = data.aws_vpc.staging.id
+  }
+
+  # Prod VPC 연결 (VPC Peering 데이터 소스 활용)
+  vpc {
+    vpc_id = data.aws_vpc.prod.id
+  }
+
+  lifecycle {
+    ignore_changes = [vpc] # 추가적인 association은 aws_route53_zone_association으로 관리될 수 있으므로
+  }
+
+  tags = {
+    Name        = "${local.name_prefix}-internal-zone"
+    Environment = local.environment
+  }
+}
+
+# 2. Loki(모니터링 서버)용 A 레코드 생성
+resource "aws_route53_record" "loki" {
+  zone_id = aws_route53_zone.internal.zone_id
+  name    = "loki.scuad.internal"
+  type    = "A"
+  ttl     = "60"
+  records = [aws_instance.monitoring.private_ip]
+}
+
+# ── VPN Instance (WireGuard) ──────────────────────────────────────────
+
+resource "aws_security_group" "vpn" {
+  name        = "${local.name_prefix}-vpn-sg"
+  description = "Security group for VPN instance (WireGuard)"
+  vpc_id      = module.network.vpc_id
+
+  ingress {
+    description = "WireGuard UDP"
+    from_port   = 51820
+    to_port     = 51820
+    protocol    = "udp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "SSH"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${local.name_prefix}-vpn-sg"
+    Environment = local.environment
+  }
+}
+
+resource "aws_instance" "vpn" {
+  ami                         = "ami-0e7e09922c94a692b"
+  instance_type               = "t3.micro"
+  subnet_id                   = module.network.public_subnet_ids[0]
+  vpc_security_group_ids      = [aws_security_group.vpn.id]
+  associate_public_ip_address = true
+  source_dest_check           = false # VPN 라우터 역할을 위해 필수
+
+  tags = {
+    Name        = "${local.name_prefix}-vpn"
+    Environment = local.environment
+  }
+}
+
+resource "aws_eip_association" "vpn_eip" {
+  instance_id   = aws_instance.vpn.id
+  allocation_id = var.vpn_eip_allocation_id
+}
+
+output "vpn_public_ip" {
+  description = "Public IP of the VPN instance"
+  value       = var.vpn_public_ip
 }

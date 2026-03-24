@@ -103,6 +103,17 @@ resource "aws_security_group" "web" {
     }
   }
 
+  dynamic "ingress" {
+    for_each = length(var.cadvisor_allowed_cidrs) > 0 ? [1] : []
+    content {
+      description = "Allow Prometheus cadvisor scrape"
+      from_port   = 9102
+      to_port     = 9102
+      protocol    = "tcp"
+      cidr_blocks = var.cadvisor_allowed_cidrs
+    }
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -171,6 +182,28 @@ resource "aws_security_group" "app_spring" {
     }
   }
 
+  dynamic "ingress" {
+    for_each = length(var.cadvisor_allowed_cidrs) > 0 ? [1] : []
+    content {
+      description = "Allow Prometheus cadvisor scrape"
+      from_port   = 9102
+      to_port     = 9102
+      protocol    = "tcp"
+      cidr_blocks = var.cadvisor_allowed_cidrs
+    }
+  }
+
+  dynamic "ingress" {
+    for_each = length(var.app_metrics_allowed_cidrs) > 0 ? [1] : []
+    content {
+      description = "Allow Prometheus application metrics scrape"
+      from_port   = 9101
+      to_port     = 9101
+      protocol    = "tcp"
+      cidr_blocks = var.app_metrics_allowed_cidrs
+    }
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -227,6 +260,17 @@ resource "aws_security_group" "app_ai" {
       to_port     = 9100
       protocol    = "tcp"
       cidr_blocks = var.node_exporter_cidr_blocks
+    }
+  }
+
+  dynamic "ingress" {
+    for_each = length(var.cadvisor_allowed_cidrs) > 0 ? [1] : []
+    content {
+      description = "Allow Prometheus cadvisor scrape"
+      from_port   = 9102
+      to_port     = 9102
+      protocol    = "tcp"
+      cidr_blocks = var.cadvisor_allowed_cidrs
     }
   }
 
