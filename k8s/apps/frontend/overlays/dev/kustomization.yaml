@@ -6,4 +6,4 @@ resources:
 namespace: dev
 images:
   - name: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-frontend
-    newTag: develop-b8bf1d2
+    newTag: develop-cacc0a7
