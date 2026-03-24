@@ -1,0 +1,272 @@
+#!/bin/bash
+set -euo pipefail
+exec > /var/log/k8s-control-plane-bootstrap.log 2>&1
+set -x
+
+REGION="${region}"
+CONTROL_PLANE_ENDPOINT="${control_plane_endpoint}:6443"
+ENDPOINT_PARAM="${kubeadm_control_plane_endpoint_ssm_param_name}"
+JOIN_TOKEN_PARAM="${kubeadm_join_token_ssm_param_name}"
+CA_HASH_PARAM="${kubeadm_ca_hash_ssm_param_name}"
+CERT_KEY_PARAM="${kubeadm_cert_key_ssm_param_name}"
+
+CRI_SOCKET="unix:///run/containerd/containerd.sock"
+
+HTTP_PROXY="${http_proxy}"
+HTTPS_PROXY="${https_proxy}"
+NO_PROXY="${no_proxy}"
+SANDBOX_IMAGE="${sandbox_image}"
+
+# IMDSv2
+TOKEN="$(curl -sS -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")"
+
+INSTANCE_ID="$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/instance-id)"
+
+AZ="$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/placement/availability-zone)"
+
+echo "===== Control plane bootstrap start ====="
+echo "INSTANCE_ID=$INSTANCE_ID"
+echo "AZ=$AZ"
+echo "CONTROL_PLANE_ENDPOINT=$CONTROL_PLANE_ENDPOINT"
+
+# Detect our Index tag via IMDS instance tags (no need for EC2 API / NAT)
+INDEX="$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/tags/instance/Index 2>/dev/null || true)"
+
+echo "Index tag (IMDS): $INDEX"
+
+# Proxy settings for containerd + kubelet (systemd drop-ins)
+mkdir -p /etc/systemd/system/containerd.service.d /etc/systemd/system/kubelet.service.d
+
+cat >/etc/systemd/system/containerd.service.d/proxy.conf <<EOF
+[Service]
+Environment="HTTP_PROXY=$HTTP_PROXY"
+Environment="HTTPS_PROXY=$HTTPS_PROXY"
+Environment="NO_PROXY=$NO_PROXY"
+EOF
+
+cat >/etc/systemd/system/kubelet.service.d/proxy.conf <<EOF
+[Service]
+Environment="HTTP_PROXY=$HTTP_PROXY"
+Environment="HTTPS_PROXY=$HTTPS_PROXY"
+Environment="NO_PROXY=$NO_PROXY"
+EOF
+
+# kubelet node-ip 고정
+PRIVATE_IP="$(hostname -I | awk '{print $1}')"
+cat >/etc/default/kubelet <<EOF
+KUBELET_EXTRA_ARGS=--node-ip=$PRIVATE_IP
+EOF
+
+# containerd sandbox image 고정
+if [ ! -f /etc/containerd/config.toml ]; then
+  mkdir -p /etc/containerd
+  containerd config default >/etc/containerd/config.toml
+fi
+sed -i "s#sandbox_image = \".*\"#sandbox_image = \"$SANDBOX_IMAGE\"#" /etc/containerd/config.toml
+
+systemctl daemon-reload
+
+# Basic services
+systemctl enable containerd || true
+systemctl restart containerd || true
+
+# kubelet requires a config file on this AMI/unit. Create a minimal one if missing.
+mkdir -p /var/lib/kubelet
+if [ ! -f /var/lib/kubelet/config.yaml ]; then
+  cat >/var/lib/kubelet/config.yaml <<'YAML'
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+cgroupDriver: systemd
+clusterDomain: cluster.local
+clusterDNS:
+  - 10.96.0.10
+YAML
+fi
+
+systemctl enable kubelet || true
+systemctl restart kubelet || true
+
+# If already initialized, do nothing
+if [ -f /etc/kubernetes/admin.conf ]; then
+  echo "Control plane already initialized (/etc/kubernetes/admin.conf exists)."
+  exit 0
+fi
+
+# Index=0 performs kubeadm init + publishes join materials.
+# Index!=0 performs automated control-plane join using SSM parameters.
+if [ "$INDEX" != "0" ]; then
+  echo "Not the initial control plane node (Index != 0). Joining as additional control-plane." 
+
+  # awscli is required for SSM read; install if missing.
+  if ! command -v aws >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y awscli
+  fi
+
+  retry() {
+    local n=0
+    local max=30
+    local delay=4
+    until "$@"; do
+      n=$((n+1))
+      if [ $n -ge $max ]; then
+        echo "Command failed after $n attempts: $*" >&2
+        return 1
+      fi
+      sleep $delay
+    done
+  }
+
+  # Fetch join materials from SSM (written by Index=0)
+  echo "Fetching join materials from SSM..."
+  JOIN_TOKEN="$(retry aws ssm get-parameter --region "$REGION" --name "$JOIN_TOKEN_PARAM" --with-decryption --query Parameter.Value --output text)"
+  CA_CERT_HASH="$(retry aws ssm get-parameter --region "$REGION" --name "$CA_HASH_PARAM" --with-decryption --query Parameter.Value --output text)"
+  # Endpoint is not secret, but still fetched from SSM for consistency
+  CP_ENDPOINT="$(retry aws ssm get-parameter --region "$REGION" --name "$ENDPOINT_PARAM" --query Parameter.Value --output text)"
+  CERT_KEY="$(retry aws ssm get-parameter --region "$REGION" --name "$CERT_KEY_PARAM" --with-decryption --query Parameter.Value --output text)"
+
+  echo "Joining control-plane to $CP_ENDPOINT"
+
+  # Reset any previous failed attempt
+  kubeadm reset -f || true
+  rm -rf /etc/cni/net.d || true
+
+  retry kubeadm join "$CP_ENDPOINT" \
+    --token "$JOIN_TOKEN" \
+    --discovery-token-ca-cert-hash "$CA_CERT_HASH" \
+    --control-plane \
+    --certificate-key "$CERT_KEY" \
+    --cri-socket "$CRI_SOCKET"
+
+  # Configure kubectl for root (optional)
+  if [ -f /etc/kubernetes/admin.conf ]; then
+    mkdir -p /root/.kube
+    cp -f /etc/kubernetes/admin.conf /root/.kube/config
+  fi
+
+  echo "Control-plane join done"
+  exit 0
+fi
+
+# Reset any previous failed attempt
+kubeadm reset -f || true
+rm -rf /etc/cni/net.d || true
+
+# kubeadm init
+# NOTE: This assumes kubeadm/kubelet/containerd are already installed (e.g., via AMI bake).
+# Ensure your kubeadm config includes podSubnet, etc. if needed.
+
+# awscli is required for SSM publish; install if missing.
+if ! command -v aws >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y awscli
+fi
+
+set +e
+kubeadm init \
+  --control-plane-endpoint "$CONTROL_PLANE_ENDPOINT" \
+  --cri-socket "$CRI_SOCKET" \
+  --upload-certs
+INIT_RC=$?
+set -e
+
+# kubeadm init can time out in wait-control-plane even if static pods end up running.
+# If admin.conf exists, proceed with post-steps and SSM publish.
+if [ $INIT_RC -ne 0 ] && [ ! -f /etc/kubernetes/admin.conf ]; then
+  echo "kubeadm init failed (rc=$INIT_RC) and /etc/kubernetes/admin.conf is missing. Aborting."
+  exit $INIT_RC
+fi
+
+# Rewrite kubeconfigs to use the local API server (avoid NLB path issues on this node)
+# NOTE: apiserver cert SAN includes the node IP (advertise-address), so this is TLS-valid.
+for f in /etc/kubernetes/admin.conf /etc/kubernetes/super-admin.conf /etc/kubernetes/kubelet.conf; do
+  if [ -f "$f" ]; then
+    sed -i "s#server: https://.*:6443#server: https://$PRIVATE_IP:6443#" "$f"
+  fi
+done
+
+# Some kubelet units reference bootstrap-kubelet.conf; ensure it exists.
+if [ -f /etc/kubernetes/kubelet.conf ] && [ ! -f /etc/kubernetes/bootstrap-kubelet.conf ]; then
+  cp -f /etc/kubernetes/kubelet.conf /etc/kubernetes/bootstrap-kubelet.conf
+fi
+
+systemctl daemon-reload
+systemctl restart kubelet || true
+
+# Configure kubectl for root
+mkdir -p /root/.kube
+cp -f /etc/kubernetes/admin.conf /root/.kube/config
+
+retry() {
+  local n=0
+  local max=20
+  local delay=3
+  until "$@"; do
+    n=$((n+1))
+    if [ $n -ge $max ]; then
+      echo "Command failed after $n attempts: $*"
+      return 1
+    fi
+    sleep $delay
+  done
+}
+
+# Create bootstrap token without calling the API server (kubeadm token create can hang in some environments).
+# Then create the corresponding bootstrap-token Secret using kubectl.
+TOKEN="$(kubeadm token generate)"
+TOKEN_ID="$${TOKEN%%.*}"
+TOKEN_SECRET="$${TOKEN#*.}"
+
+# Ensure super-admin kubeconfig exists
+if [ ! -f /etc/kubernetes/super-admin.conf ]; then
+  echo "Missing /etc/kubernetes/super-admin.conf; cannot create bootstrap token Secret via kubectl"
+  exit 1
+fi
+
+echo "Creating bootstrap token secret bootstrap-token-$TOKEN_ID"
+KUBECONFIG=/etc/kubernetes/super-admin.conf \
+  kubectl --server="https://$PRIVATE_IP:6443" \
+  -n kube-system apply -f - <<YAML
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bootstrap-token-$${TOKEN_ID}
+  namespace: kube-system
+type: bootstrap.kubernetes.io/token
+stringData:
+  description: "kubeadm bootstrap token"
+  token-id: "$${TOKEN_ID}"
+  token-secret: "$${TOKEN_SECRET}"
+  usage-bootstrap-authentication: "true"
+  usage-bootstrap-signing: "true"
+  auth-extra-groups: "system:bootstrappers:kubeadm:default-node-token"
+YAML
+
+# Compute CA cert hash locally
+CA_HASH="$(openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt \
+  | openssl rsa -pubin -outform der 2>/dev/null \
+  | openssl dgst -sha256 -hex | awk '{print $2}')"
+CA_CERT_HASH="sha256:$CA_HASH"
+
+echo "Publishing control plane endpoint + join materials to SSM"
+# Extract certificate key (needed for other control-plane nodes to join)
+# `kubeadm init --upload-certs` prints it, but we recompute/refresh it deterministically here.
+CERT_KEY="$(kubeadm init phase upload-certs --upload-certs 2>/dev/null | tail -n 1 | tr -d '[:space:]')"
+if [ -z "$CERT_KEY" ]; then
+  echo "Failed to obtain certificate key for control-plane join"
+  exit 1
+fi
+
+echo "Publishing control plane endpoint + join materials to SSM"
+retry aws ssm put-parameter --region "$REGION" --name "$ENDPOINT_PARAM" --type String --value "$CONTROL_PLANE_ENDPOINT" --overwrite
+retry aws ssm put-parameter --region "$REGION" --name "$JOIN_TOKEN_PARAM" --type SecureString --value "$TOKEN" --overwrite
+retry aws ssm put-parameter --region "$REGION" --name "$CA_HASH_PARAM" --type SecureString --value "$CA_CERT_HASH" --overwrite
+retry aws ssm put-parameter --region "$REGION" --name "$CERT_KEY_PARAM" --type SecureString --value "$CERT_KEY" --overwrite
+
+echo "Done"

@@ -13,6 +13,8 @@ kind: Ingress
 metadata:
   name: dev-ing
   namespace: dev
+  annotations:                                                                                                                                                     
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m" 
 spec:
   ingressClassName: nginx
   rules:
@@ -26,6 +28,13 @@ spec:
                 port:
                   number: 8000
           - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: spring-app
+                port:
+                  number: 80
+          - path: /ws
             pathType: Prefix
             backend:
               service:

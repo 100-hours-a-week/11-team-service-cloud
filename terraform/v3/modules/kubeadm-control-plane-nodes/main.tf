@@ -68,6 +68,14 @@ resource "aws_iam_role_policy" "ssm_put_parameter" {
         Resource = [
           for n in var.ssm_put_parameter_names : "arn:aws:ssm:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:parameter${n}"
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeTags",
+          "ec2:DescribeInstances"
+        ]
+        Resource = "*"
       }
     ]
   })
@@ -119,6 +127,20 @@ resource "aws_security_group_rule" "cp_apiserver_6443" {
   description = "kube-apiserver (6443)"
 }
 
+# etcd (stacked etcd on control-plane nodes)
+# Required for multi-control-plane join/health.
+resource "aws_security_group_rule" "cp_etcd_2379_2380_self" {
+  type              = "ingress"
+  security_group_id = aws_security_group.cp.id
+
+  protocol  = "tcp"
+  from_port = 2379
+  to_port   = 2380
+
+  source_security_group_id = aws_security_group.cp.id
+  description              = "etcd client/peer (2379-2380) between control-plane nodes"
+}
+
 # SSH (optional)
 resource "aws_security_group_rule" "cp_ssh" {
   count             = length(var.allowed_ssh_cidrs) > 0 ? 1 : 0
@@ -143,6 +165,13 @@ resource "aws_instance" "cp" {
 
   iam_instance_profile = aws_iam_instance_profile.ssm.name
   key_name             = var.ssh_key_name
+
+  metadata_options {
+    http_tokens                 = "required"
+    instance_metadata_tags      = "enabled"
+    http_endpoint               = "enabled"
+    http_put_response_hop_limit = 2
+  }
 
   user_data = var.control_plane_user_data
 

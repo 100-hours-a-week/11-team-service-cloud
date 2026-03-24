@@ -15,6 +15,8 @@ data "aws_vpc" "this" {
 
 locals {
   effective_ami_id = var.ami_id != null ? var.ami_id : data.aws_ssm_parameter.ubuntu_2404_ami.value
+
+  effective_subnet_ids = var.subnet_ids != null ? var.subnet_ids : compact([var.subnet_id])
 }
 
 resource "aws_security_group" "proxy" {
@@ -87,9 +89,11 @@ resource "aws_iam_instance_profile" "ssm" {
 }
 
 resource "aws_instance" "proxy" {
+  for_each = toset(local.effective_subnet_ids)
+
   ami                    = local.effective_ami_id
   instance_type          = var.instance_type
-  subnet_id              = var.subnet_id
+  subnet_id              = each.value
   vpc_security_group_ids = [aws_security_group.proxy.id]
 
   iam_instance_profile = aws_iam_instance_profile.ssm.name
@@ -152,6 +156,59 @@ systemctl restart squid
 EOF
 
   tags = merge(local.base_tags, {
-    Name = "${var.name_prefix}-egress-proxy"
+    Name = "${var.name_prefix}-egress-proxy-${replace(each.value, "subnet-", "")}"
   })
+}
+
+# --------------------------------------
+# Internal NLB endpoint for proxy (one stable DNS)
+# --------------------------------------
+resource "aws_lb" "proxy" {
+  count              = var.enable_nlb ? 1 : 0
+  name               = "${var.name_prefix}-egress-proxy"
+  load_balancer_type = "network"
+  internal           = true
+  subnets            = local.effective_subnet_ids
+
+  tags = merge(local.base_tags, {
+    Name = "${var.name_prefix}-egress-proxy-nlb"
+  })
+}
+
+resource "aws_lb_target_group" "proxy" {
+  count       = var.enable_nlb ? 1 : 0
+  name        = "${var.name_prefix}-egress-proxy"
+  port        = var.proxy_port
+  protocol    = "TCP"
+  vpc_id      = var.vpc_id
+  target_type = "instance"
+
+  health_check {
+    protocol = "TCP"
+    port     = tostring(var.proxy_port)
+  }
+
+  tags = merge(local.base_tags, {
+    Name = "${var.name_prefix}-egress-proxy-tg"
+  })
+}
+
+resource "aws_lb_target_group_attachment" "proxy" {
+  for_each = var.enable_nlb ? aws_instance.proxy : {}
+
+  target_group_arn = aws_lb_target_group.proxy[0].arn
+  target_id        = each.value.id
+  port             = var.proxy_port
+}
+
+resource "aws_lb_listener" "proxy" {
+  count             = var.enable_nlb ? 1 : 0
+  load_balancer_arn = aws_lb.proxy[0].arn
+  port              = var.proxy_port
+  protocol          = "TCP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.proxy[0].arn
+  }
 }
