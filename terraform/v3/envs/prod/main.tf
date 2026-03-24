@@ -1,6 +1,10 @@
 locals {
   environment = "prod"
   name_prefix = "${var.project}-v3-${local.environment}"
+
+  # Keep this space-free. It is consumed by systemd env and various tooling.
+  # NOTE: Do NOT include ".amazonaws.com" here; kubeadm image pulls can redirect to public S3 URLs (registry.k8s.io backend).
+  no_proxy = "127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,169.254.169.254,.cluster.local,.ecr.ap-northeast-2.amazonaws.com,.dkr.ecr.ap-northeast-2.amazonaws.com,.s3.ap-northeast-2.amazonaws.com"
 }
 
 data "aws_ssm_parameter" "vpc_id" {
@@ -103,6 +107,7 @@ module "kubeadm_control_plane" {
     kubeadm_control_plane_endpoint_ssm_param_name = var.kubeadm_control_plane_endpoint_ssm_param_name
     kubeadm_join_token_ssm_param_name             = var.kubeadm_join_token_ssm_param_name
     kubeadm_ca_hash_ssm_param_name                = var.kubeadm_ca_hash_ssm_param_name
+    kubeadm_cert_key_ssm_param_name               = var.kubeadm_cert_key_ssm_param_name
 
     http_proxy  = "http://${module.egress_proxy.endpoint_dns_name}:${var.egress_proxy_port}"
     https_proxy = "http://${module.egress_proxy.endpoint_dns_name}:${var.egress_proxy_port}"
@@ -116,24 +121,8 @@ module "kubeadm_control_plane" {
     var.kubeadm_control_plane_endpoint_ssm_param_name,
     var.kubeadm_join_token_ssm_param_name,
     var.kubeadm_ca_hash_ssm_param_name,
+    var.kubeadm_cert_key_ssm_param_name,
   ]
-
-  tags = {
-    Project = var.project
-  }
-}
-
-module "kubeadm_control_plane_endpoint" {
-  source = "../../modules/kubeadm-control-plane-endpoint-nlb"
-
-  name_prefix = local.name_prefix
-  environment = local.environment
-
-  vpc_id     = data.aws_ssm_parameter.vpc_id.value
-  subnet_ids = [data.aws_subnet.workers_a.id, data.aws_subnet.workers_b.id]
-  internal   = true
-
-  target_instance_ids = module.kubeadm_control_plane.instance_ids
 
   tags = {
     Project = var.project

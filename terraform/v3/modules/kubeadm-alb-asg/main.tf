@@ -342,7 +342,7 @@ resource "aws_autoscaling_group" "workers" {
     for_each = var.enable_cluster_autoscaler && var.cluster_name != null ? [1] : []
     content {
       key                 = "k8s.io/cluster-autoscaler/${var.cluster_name}"
-      value               = "owned"
+      value               = "true"
       propagate_at_launch = true
     }
   }

@@ -59,6 +59,18 @@ variable "workers_max" {
   default = 6
 }
 
+variable "cluster_name" {
+  description = "Kubernetes cluster name (used by cluster-autoscaler)"
+  type        = string
+  default     = "scuad-cluster"
+}
+
+variable "enable_cluster_autoscaler" {
+  description = "Enable cluster-autoscaler integration (ASG tags + IAM on worker role)"
+  type        = bool
+  default     = false
+}
+
 variable "worker_instance_type" {
   type    = string
   default = "t3.medium"
@@ -109,7 +121,7 @@ variable "ssh_key_name" {
 }
 
 variable "worker_user_data" {
-  description = "Optional override user-data for worker nodes. If null, the kubeadm auto-join template is used."
+  description = "cloud-init/user-data for worker nodes (kubeadm join etc.)"
   type        = string
   default     = null
 }
@@ -122,6 +134,12 @@ variable "kubeadm_join_token_ssm_param_name" {
 variable "kubeadm_ca_hash_ssm_param_name" {
   description = "SSM parameter name containing discovery-token-ca-cert-hash"
   type        = string
+}
+
+variable "kubeadm_cert_key_ssm_param_name" {
+  description = "SSM parameter name containing kubeadm certificate key for control-plane join"
+  type        = string
+  default     = "/scuad/v3/prod/kubeadm/cert_key"
 }
 
 variable "kubeadm_control_plane_endpoint_ssm_param_name" {

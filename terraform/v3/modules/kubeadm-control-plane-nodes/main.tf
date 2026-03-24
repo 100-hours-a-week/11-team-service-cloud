@@ -127,6 +127,20 @@ resource "aws_security_group_rule" "cp_apiserver_6443" {
   description = "kube-apiserver (6443)"
 }
 
+# etcd (stacked etcd on control-plane nodes)
+# Required for multi-control-plane join/health.
+resource "aws_security_group_rule" "cp_etcd_2379_2380_self" {
+  type              = "ingress"
+  security_group_id = aws_security_group.cp.id
+
+  protocol  = "tcp"
+  from_port = 2379
+  to_port   = 2380
+
+  source_security_group_id = aws_security_group.cp.id
+  description              = "etcd client/peer (2379-2380) between control-plane nodes"
+}
+
 # SSH (optional)
 resource "aws_security_group_rule" "cp_ssh" {
   count             = length(var.allowed_ssh_cidrs) > 0 ? 1 : 0
