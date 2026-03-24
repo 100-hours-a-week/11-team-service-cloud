@@ -6,12 +6,12 @@ resources:
 namespace: prod
 images:
   - name: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-api
-    newTag: main-initial
+    newTag: main-0a76bf2
   - name: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-resume
-    newTag: main-initial
+    newTag: main-0a76bf2
   - name: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-job
-    newTag: main-initial
+    newTag: main-0a76bf2
   - name: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-evaluate
-    newTag: main-initial
+    newTag: main-0a76bf2
   - name: 209192769586.dkr.ecr.ap-northeast-2.amazonaws.com/scuad-ai-worker-compare
-    newTag: main-initial
+    newTag: main-0a76bf2
