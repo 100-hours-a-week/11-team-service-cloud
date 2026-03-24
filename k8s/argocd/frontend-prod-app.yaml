@@ -14,7 +14,7 @@ spec:
     targetRevision: develop
     path: k8s/apps/frontend/overlays/prod
   destination:
-    server: "https://kubernetes.default.svc"
+    server: "https://scuad-v3-prod-cp-nlb-2d0fce3ed45205e4.elb.ap-northeast-2.amazonaws.com:6443"
     namespace: prod
   syncPolicy:
     automated:
